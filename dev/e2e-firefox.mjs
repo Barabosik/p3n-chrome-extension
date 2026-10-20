@@ -141,7 +141,8 @@ try {
     await wait(250);
     for (const p of await browser.pages()) if ((await p.evaluate(() => location.pathname).catch(() => '')).endsWith('/ui/options.html')) opts = p;
   }
-  await opts.type('#key', 'p3n_not_a_real_key');
+  // Newer Firefox refuses typed input on extension pages, so set the field and fire the event the page listens to.
+  await opts.evaluate(() => { const k = document.querySelector('#key'); k.value = 'p3n_not_a_real_key'; k.dispatchEvent(new Event('input')); });
   await opts.waitForFunction(() => /accept|reach/.test(document.querySelector('#status').textContent), { timeout: 15000, polling: 100 }).catch(() => {});
   const optMsg = await opts.$eval('#status', (s) => s.textContent);
   const stored = await opts.evaluate(async () => (await browser.storage.local.get('apiKey')).apiKey ?? null);
