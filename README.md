@@ -67,7 +67,7 @@ Only the text you select, and only when you choose Check or Rewrite (or click a 
 | `ui/panel.*` | The side panel. It makes the API call itself, because the browser can stop the background script during a minute-long rewrite. Motion is kept to the result: the score counts to its value and changes colour band by band, flagged sentences get a highlighter sweep, a rewrite wipes in. With reduced motion on, the end state shows at once. |
 | `ui/options.*` | The API key page. |
 
-Colours are the p3n.si tokens. The icon is the p3n pen from [zdresearch/p3n-web#4](https://github.com/zdresearch/p3n-web/pull/4) (`dev/logo-512.png` is the source).
+Colours are the p3n.si tokens. The icon is the p3n pen from [zdresearch/p3n-web#4](https://github.com/zdresearch/p3n-web/pull/4) (`dev/logo-512.png` is the source). `python dev/icons.py` builds the browser icons on a light rounded tile, so they read on dark toolbars too; at 16 and 32 px they show only the pen.
 
 ## Develop and test
 
