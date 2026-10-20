@@ -12,6 +12,8 @@ export const FIXTURES = {
   humanize: { id: 'mock-humanize', skill: 'humanize', status: 'succeeded', cached: false, error: null, charged_usd: '0',
     // The live API ends the rewrite with a line break; the panel must not carry it into the page.
     output: { version: 'humanize-v1.1', model: 'haiku', text: 'It works for teams of all sizes.\n', ai_before: 0.08, ai_after: 0.02, label_after: 'human', passes: true, invented_blocked: [] } },
+  // /v1/me with any key (the options page's wrong-key check), sent with a 401.
+  me: { error: { type: 'unauthorized', message: 'Invalid API key.' } },
 };
 
 const page = (body) => `<!doctype html><meta charset="utf-8"><title>p3n test</title>
@@ -30,7 +32,7 @@ export async function startServer({ api = false } = {}) {
     const skill = api && req.method === 'POST' && req.url.match(/^\/v1\/(detect|humanize)$/)?.[1];
     if (api && req.method === 'OPTIONS') return res.writeHead(204, cors).end();
     if (skill) return res.writeHead(200, { ...cors, 'Content-Type': 'application/json', 'X-Free-Remaining': '9' }).end(JSON.stringify(FIXTURES[skill]));
-    if (api && req.url === '/v1/me') return res.writeHead(401, { ...cors, 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { type: 'unauthorized', message: 'Invalid API key.' } }));
+    if (api && req.url === '/v1/me') return res.writeHead(401, { ...cors, 'Content-Type': 'application/json' }).end(JSON.stringify(FIXTURES.me));
     res.writeHead(PAGES[req.url] ? 200 : 404, { 'Content-Type': 'text/html' }).end(PAGES[req.url] ?? 'not found');
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));

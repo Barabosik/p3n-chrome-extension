@@ -12,7 +12,7 @@ import { scoreSettled, selectField, selectNode, startServer } from './shared.mjs
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(import.meta.dirname, 'out');
-const FIREFOX = process.env.FIREFOX || 'C:/Program Files/Mozilla Firefox/firefox.exe';
+const FIREFOX = process.env.FIREFOX || { linux: '/usr/bin/firefox', darwin: '/Applications/Firefox.app/Contents/MacOS/firefox' }[process.platform] || 'C:/Program Files/Mozilla Firefox/firefox.exe';
 const MOCK = !!process.env.MOCK;
 const results = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass, detail }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`); };

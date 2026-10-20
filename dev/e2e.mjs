@@ -10,7 +10,7 @@ import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/pro
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(import.meta.dirname, 'out');
-const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const CHROME = process.env.CHROME || { linux: '/usr/bin/google-chrome', darwin: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' }[process.platform] || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const MOCK = !!process.env.MOCK; // canned API runs (shared.mjs) instead of the live API
 const results = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass, detail }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`); };
@@ -36,7 +36,8 @@ const { server, base } = await startServer();
 
 // ---- browser ---------------------------------------------------------------------------------
 await mkdir(OUT, { recursive: true });
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, pipe: true, enableExtensions: true, args: ['--window-size=1280,900', '--lang=en-US'] });
+// CI runners and containers have no usable Chrome sandbox.
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, pipe: true, enableExtensions: true, args: ['--window-size=1280,900', '--lang=en-US', ...(process.env.CI ? ['--no-sandbox'] : [])] });
 const errors = [];
 try {
   const id = await browser.installExtension(ext);
@@ -170,6 +171,12 @@ try {
   const opts = await browser.newPage();
   watch(opts, 'options');
   await opts.setViewport({ width: 760, height: 640 });
+  if (MOCK) { // the key check too, so a mocked run makes no live call
+    await opts.setRequestInterception(true);
+    opts.on('request', (r) => (r.url().startsWith('https://api.p3n.si/v1/')
+      ? r.respond({ status: 401, contentType: 'application/json', body: JSON.stringify(FIXTURES.me) })
+      : r.continue()));
+  }
   await opts.goto(`chrome-extension://${id}/ui/options.html`);
   await opts.type('#key', 'p3n_not_a_real_key');
   await opts.waitForFunction(() => /accept|reach/.test(document.querySelector('#status').textContent), { timeout: 15000 }).catch(() => {});
