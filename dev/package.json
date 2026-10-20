@@ -1,7 +1,7 @@
 {
   "private": true,
   "type": "module",
-  "description": "Dev tools for the p3n extension (not shipped): store builds, end-to-end checks in Chrome-family browsers and Firefox.",
+  "description": "Dev tools for the p3n extension (not shipped): store builds and uploads, end-to-end checks in Chrome-family browsers and Firefox.",
   "scripts": {
     "build": "node build.mjs",
     "e2e": "node e2e.mjs",
@@ -9,6 +9,7 @@
     "lint:firefox": "node build.mjs && web-ext lint -s ../dist/firefox"
   },
   "devDependencies": {
+    "chrome-webstore-upload-cli": "4.0.1",
     "puppeteer-core": "25.14.0",
     "web-ext": "10.7.0"
   }

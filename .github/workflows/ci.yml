@@ -1,0 +1,59 @@
+# Build, lint and the mocked end-to-end checks in Chrome and Firefox. Never calls api.p3n.si.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Install dev tools
+        working-directory: dev
+        run: npm ci
+
+      - name: Build
+        id: build
+        run: node dev/build.mjs
+
+      # web-ext lint fails on errors; its one warning (Firefox for Android) is expected.
+      - name: Lint the Firefox build
+        working-directory: dev
+        run: npm run lint:firefox
+
+      # The runner's own browsers. CI is set, so Chrome runs without its sandbox.
+      - name: End-to-end, Chrome (mocked API)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: dev
+        run: MOCK=1 CHROME="$(command -v google-chrome)" node e2e.mjs
+
+      - name: End-to-end, Firefox (mocked API)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: dev
+        run: MOCK=1 FIREFOX="$(command -v firefox)" node e2e-firefox.mjs
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: store-zips
+          path: dist/*.zip
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: screenshots
+          path: dev/out/*.png
+          if-no-files-found: warn

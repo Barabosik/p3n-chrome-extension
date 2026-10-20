@@ -1,0 +1,85 @@
+# On a version tag: build both store zips, attach them to a GitHub Release, and submit them to the
+# Chrome Web Store and addons.mozilla.org when their secrets are set (each skipped without them).
+# See docs/CI.md.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Tag matches manifest.json
+        run: |
+          version="$(node -p "require('./manifest.json').version")"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match manifest.json version $version (expected v$version)."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Install dev tools
+        working-directory: dev
+        run: npm ci
+
+      - name: Build the store zips
+        run: node dev/build.mjs
+
+      - name: Lint the Firefox build
+        working-directory: dev
+        run: npx web-ext lint -s ../dist/firefox
+
+      # Upload instead of create on a re-run, so a re-run (say, after adding store secrets) gets past this.
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.zip --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+          fi
+
+      # Secrets can't be tested in a step's `if`, so this step says which stores to submit to.
+      - name: Which store secrets are set
+        id: stores
+        env:
+          CWS: ${{ secrets.CWS_EXTENSION_ID != '' && secrets.CWS_PUBLISHER_ID != '' && secrets.CWS_CLIENT_ID != '' && secrets.CWS_CLIENT_SECRET != '' && secrets.CWS_REFRESH_TOKEN != '' }}
+          AMO: ${{ secrets.AMO_JWT_ISSUER != '' && secrets.AMO_JWT_SECRET != '' }}
+        run: |
+          echo "cws=$CWS" >> "$GITHUB_OUTPUT"
+          echo "amo=$AMO" >> "$GITHUB_OUTPUT"
+          [ "$CWS" = true ] || echo "::notice::Chrome Web Store secrets not all set: skipping that upload."
+          [ "$AMO" = true ] || echo "::notice::addons.mozilla.org secrets not set: skipping that submission."
+
+      # Uploads the zip and submits it for review (Chrome Web Store API v2).
+      - name: Chrome Web Store
+        if: steps.stores.outputs.cws == 'true'
+        working-directory: dev
+        env:
+          EXTENSION_ID: ${{ secrets.CWS_EXTENSION_ID }}
+          PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: npx chrome-webstore-upload --source "../dist/p3n-chrome-$VERSION.zip"
+
+      # Submits a listed version for review; doesn't wait for it.
+      - name: addons.mozilla.org
+        if: ${{ !cancelled() && steps.stores.outputs.amo == 'true' }}
+        working-directory: dev
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: npx web-ext sign --channel listed --source-dir ../dist/firefox --artifacts-dir ../dist/amo --approval-timeout 0
