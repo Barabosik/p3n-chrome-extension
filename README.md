@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Firefox Add-ons (in review) · Chrome Web Store (soon) · <a href="https://p3n.si">p3n.si</a>
+  Chrome Web Store (in review) · Firefox Add-ons (in review) · <a href="https://p3n.si">p3n.si</a>
 </p>
 
 <p align="center">

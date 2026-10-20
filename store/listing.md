@@ -2,6 +2,8 @@
 
 What goes into the Chrome Web Store and addons.mozilla.org forms. The zips come from `node dev/build.mjs`, and the images are in this folder.
 
+Listings: Chrome Web Store item `bingopgkcgafmnpkoeckijkcbnfmchnh` (chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh once live), Firefox slug `p3n` (addons.mozilla.org/firefox/addon/p3n). Both submitted for review on 2026-10-20 as 0.1.0.
+
 ## Description (both stores)
 
 ```
