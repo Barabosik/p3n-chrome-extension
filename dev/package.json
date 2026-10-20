@@ -1,7 +1,15 @@
 {
   "private": true,
   "type": "module",
-  "description": "Dev tools for the p3n extension (not shipped): an end-to-end check in a throwaway Chrome profile.",
-  "scripts": { "e2e": "node e2e.mjs" },
-  "devDependencies": { "puppeteer-core": "25.14.0" }
+  "description": "Dev tools for the p3n extension (not shipped): store builds, end-to-end checks in Chrome-family browsers and Firefox.",
+  "scripts": {
+    "build": "node build.mjs",
+    "e2e": "node e2e.mjs",
+    "e2e:firefox": "node e2e-firefox.mjs",
+    "lint:firefox": "node build.mjs && web-ext lint -s ../dist/firefox"
+  },
+  "devDependencies": {
+    "puppeteer-core": "25.14.0",
+    "web-ext": "10.7.0"
+  }
 }

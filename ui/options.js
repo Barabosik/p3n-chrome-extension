@@ -1,4 +1,5 @@
 import { me } from '../lib/api.js';
+import { ext } from '../lib/ext.js';
 
 const key = document.querySelector('#key');
 const status = document.querySelector('#status');
@@ -21,7 +22,7 @@ async function checkAndSave(k) {
   try {
     const m = await me(k);
     if (mine !== pending) return;
-    if (k !== saved) await chrome.storage.local.set({ apiKey: k });
+    if (k !== saved) await ext.storage.local.set({ apiKey: k });
     saved = k;
     say(`Saved. Signed in as ${m.email}, balance $${Number(m.balance_usd).toFixed(2)}.`, 'ok');
   } catch (e) {
@@ -40,14 +41,14 @@ key.addEventListener('input', () => {
 });
 
 document.querySelector('#remove').addEventListener('click', async () => {
-  await chrome.storage.local.remove('apiKey');
+  await ext.storage.local.remove('apiKey');
   saved = '';
   key.value = '';
   say('Key removed. p3n still works without one, with the free hourly limit.');
 });
 
 (async () => {
-  const { apiKey } = await chrome.storage.local.get('apiKey');
+  const { apiKey } = await ext.storage.local.get('apiKey');
   saved = apiKey || '';
   key.value = saved;
   if (saved) checkAndSave(saved);

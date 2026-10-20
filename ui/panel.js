@@ -1,5 +1,6 @@
 import { runSkill, me, ApiError, LINKS, MAX_CHARS } from '../lib/api.js';
 import { captureSelection, replaceSelection } from '../lib/page.js';
+import { ext } from '../lib/ext.js';
 
 const $ = (s) => document.querySelector(s);
 const els = {
@@ -115,16 +116,16 @@ els.check.addEventListener('click', () => start('detect', els.text.value));
 els.rewrite.addEventListener('click', () => start('humanize', els.text.value));
 els.cancel.addEventListener('click', () => state.controller?.abort());
 els.grab.addEventListener('click', grabSelection);
-els.account.addEventListener('click', () => chrome.runtime.openOptionsPage());
+els.account.addEventListener('click', () => ext.runtime.openOptionsPage());
 
 // Pulls the selection from the active tab. Works after the toolbar button or the right-click menu
 // opened the panel (both give one-time access to that tab).
 async function grabSelection() {
   hint('');
-  const [tab] = await chrome.tabs.query({ active: true, windowId: state.windowId });
+  const [tab] = await ext.tabs.query({ active: true, windowId: state.windowId });
   if (!tab) return;
   try {
-    const results = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: captureSelection });
+    const results = await ext.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: captureSelection });
     const hit = results.find((r) => r.result?.text?.trim());
     if (!hit) return hint('Nothing is selected on the page. Select some text first.');
     state.source = { tabId: tab.id, frameId: hit.frameId, editable: hit.result.editable, text: hit.result.text };
@@ -140,9 +141,9 @@ async function grabSelection() {
 
 async function takeJob(job) {
   if (!job || job.windowId !== state.windowId) return;
-  const { handled } = await chrome.storage.session.get('handled');
+  const { handled } = await ext.storage.session.get('handled');
   if (handled === job.id || Date.now() - job.at > 120_000) return;
-  await chrome.storage.session.set({ handled: job.id });
+  await ext.storage.session.set({ handled: job.id });
   state.source = { tabId: job.tabId, frameId: job.frameId, editable: job.editable, text: job.text };
   els.text.value = job.text;
   arrived();
@@ -150,7 +151,7 @@ async function takeJob(job) {
   start(job.skill, job.text);
 }
 
-chrome.storage.onChanged.addListener((changes, area) => {
+ext.storage.onChanged.addListener((changes, area) => {
   if (area === 'session' && changes.job?.newValue) takeJob(changes.job.newValue);
   if (area === 'local' && 'apiKey' in changes) { state.key = changes.apiKey.newValue || ''; refreshInput(); refreshAccount(); }
 });
@@ -172,12 +173,12 @@ async function start(skill, text, options) {
   setBusy(skill);
   try {
     const { run, free } = await runSkill(skill, text, { key: state.key, options, signal: controller.signal });
-    if (free !== null) { state.free = free; chrome.storage.session.set({ free }); }
+    if (free !== null) { state.free = free; ext.storage.session.set({ free }); }
     state.last = { skill, text, run };
     render(run, text);
   } catch (e) {
     if (e.name !== 'AbortError') showError(e);
-    if (e.free != null) { state.free = e.free; chrome.storage.session.set({ free: e.free }); }
+    if (e.free != null) { state.free = e.free; ext.storage.session.set({ free: e.free }); }
   } finally {
     if (state.controller === controller) state.controller = null;
     setBusy(null);
@@ -291,7 +292,7 @@ async function replaceOnPage(text, button, status) {
   const s = state.source;
   const say = (msg, kind) => { status.textContent = msg; status.className = `note small ${kind}`; status.hidden = false; };
   try {
-    const [res] = await chrome.scripting.executeScript({ target: { tabId: s.tabId, frameIds: [s.frameId ?? 0] }, func: replaceSelection, args: [text] });
+    const [res] = await ext.scripting.executeScript({ target: { tabId: s.tabId, frameIds: [s.frameId ?? 0] }, func: replaceSelection, args: [text] });
     const r = res?.result;
     if (r?.ok) {
       button.replaceChildren(checkMark(), 'Replaced');
@@ -308,7 +309,7 @@ async function replaceOnPage(text, button, status) {
 
 function showError(e) {
   const kids = [];
-  const keyBtn = (label) => h('button', { type: 'button', class: 'btn ghost', onclick: () => chrome.runtime.openOptionsPage() }, label);
+  const keyBtn = (label) => h('button', { type: 'button', class: 'btn ghost', onclick: () => ext.runtime.openOptionsPage() }, label);
   switch (e.type) {
     case 'free_limit': {
       const mins = e.retryAfter ? Math.max(1, Math.ceil(e.retryAfter / 60)) : null;
@@ -354,8 +355,8 @@ async function refreshAccount() {
 // ---- boot --------------------------------------------------------------------------------
 
 (async () => {
-  state.windowId = (await chrome.windows.getCurrent()).id;
-  const [{ apiKey }, { job, free }] = await Promise.all([chrome.storage.local.get('apiKey'), chrome.storage.session.get(['job', 'free'])]);
+  state.windowId = (await ext.windows.getCurrent()).id;
+  const [{ apiKey }, { job, free }] = await Promise.all([ext.storage.local.get('apiKey'), ext.storage.session.get(['job', 'free'])]);
   state.key = apiKey || '';
   state.free = free ?? null;
   refreshInput();

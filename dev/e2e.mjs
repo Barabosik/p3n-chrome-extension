@@ -3,7 +3,7 @@
 // A script can't click Chrome's own right-click menu, so it loads a dev copy of the extension that
 // also has host access to the local test server, and starts the same startJob the menu does, by message.
 import puppeteer from 'puppeteer-core';
-import http from 'node:http';
+import { FIXTURES, scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -11,26 +11,13 @@ import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/pro
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(import.meta.dirname, 'out');
 const CHROME = process.env.CHROME || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const AI_TEXT = "In today's fast-paced world, it's worth noting that effective communication is more important than ever. Moreover, leveraging the right tools can help teams unlock their full potential and navigate the complexities of modern work.";
-const SHORT = 'Moreover, this seamless solution unlocks a rich tapestry of possibilities for teams of all sizes.';
-
-// MOCK=1 answers the panel's API calls with these canned runs instead (no keyless calls used).
-const MOCK = !!process.env.MOCK;
-const FIXTURES = {
-  detect: { id: 'mock-detect', skill: 'detect', status: 'succeeded', cached: false, error: null, charged_usd: '0',
-    output: { version: 'detect-v1.2', ai: 0.96, label: 'ai', verdict: 'Generic filler phrases with no specific claim or example.', confidence: { level: 'medium', reason: 'Two short sentences.' },
-      sentences: [{ text: AI_TEXT.split('. ')[0] + '.', why: 'A stock opening with a vague claim.' }], examples: [] } },
-  humanize: { id: 'mock-humanize', skill: 'humanize', status: 'succeeded', cached: false, error: null, charged_usd: '0',
-    // The live API ends the rewrite with a line break; the panel must not carry it into the page.
-    output: { version: 'humanize-v1.1', model: 'haiku', text: 'It works for teams of all sizes.\n', ai_before: 0.08, ai_after: 0.02, label_after: 'human', passes: true, invented_blocked: [] } },
-};
-
+const MOCK = !!process.env.MOCK; // canned API runs (shared.mjs) instead of the live API
 const results = [];
 const ok = (name, pass, detail = '') => { results.push({ name, pass, detail }); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`); };
 
 // ---- dev copy of the extension --------------------------------------------------------------
 const ext = await mkdtemp(path.join(os.tmpdir(), 'p3n-ext-'));
-await cp(ROOT, ext, { recursive: true, filter: (src) => !/^[\\/]?(dev|\.git|\.claude|node_modules)([\\/]|$)/.test(path.relative(ROOT, src)) });
+await cp(ROOT, ext, { recursive: true, filter: (src) => !/^[\\/]?(dev|dist|store|\.git|\.claude|node_modules)([\\/]|$)/.test(path.relative(ROOT, src)) });
 const manifest = JSON.parse(await readFile(path.join(ext, 'manifest.json'), 'utf8'));
 manifest.host_permissions.push('http://127.0.0.1/*');
 await writeFile(path.join(ext, 'manifest.json'), JSON.stringify(manifest, null, 2));
@@ -45,16 +32,7 @@ chrome.runtime.onMessage.addListener((m, _sender, reply) => {
 `);
 
 // ---- test pages ------------------------------------------------------------------------------
-const page = (body) => `<!doctype html><meta charset="utf-8"><title>p3n test</title>
-<style>body{font:16px/1.6 system-ui;max-width:640px;margin:40px auto;padding:0 20px;color:#222}textarea,[contenteditable]{width:100%;min-height:140px;font:inherit;padding:10px;border:1px solid #bbb;border-radius:6px}</style>${body}`;
-const PAGES = {
-  '/textarea': page(`<h1>Compose</h1><textarea id="box">${SHORT}</textarea>`),
-  '/rich': page(`<h1>Email</h1><div id="box" contenteditable="true"><div>Hi team,</div><div>${SHORT}</div><div>Thanks</div></div>`),
-  '/static': page(`<h1>Blog post</h1><article><p id="box">${AI_TEXT}</p></article>`),
-};
-const server = http.createServer((req, res) => { res.writeHead(PAGES[req.url] ? 200 : 404, { 'Content-Type': 'text/html' }); res.end(PAGES[req.url] ?? 'not found'); });
-await new Promise((r) => server.listen(0, '127.0.0.1', r));
-const base = `http://127.0.0.1:${server.address().port}`;
+const { server, base } = await startServer();
 
 // ---- browser ---------------------------------------------------------------------------------
 await mkdir(OUT, { recursive: true });
@@ -72,6 +50,7 @@ try {
     menus = await sw.evaluate(async () => Promise.all(['p3n', 'p3n-detect', 'p3n-humanize'].map((m) => chrome.contextMenus.update(m, {}).then(() => true, () => false))));
   }
   ok('context menus exist (p3n > Check for AI, Rewrite)', menus.every(Boolean), String(menus));
+  ok('side panel API present', await sw.evaluate(() => typeof chrome.sidePanel?.open === 'function'));
 
   const watch = (p, name) => {
     p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
@@ -85,13 +64,6 @@ try {
 
   // A tab behind the panel paints no frames in headless Chrome, so its screenshot can wait forever.
   const shot = async (p, file) => { await p.bringToFront(); await p.screenshot({ path: path.join(OUT, file) }); };
-
-  // The score counts to its value: true once the number on screen is the stated one and the bar is at rest.
-  const scoreSettled = () => {
-    const n = document.querySelector('.score .num');
-    const sr = document.querySelector('.score .sr');
-    return !!n && n.textContent === sr.textContent && !document.querySelector('.meter i')?.style.transform;
-  };
 
   async function scenario({ name, url, skill, select, expectReplace, calm }) {
     const tab = await browser.newPage();
@@ -156,6 +128,10 @@ try {
         }
         if (url === '/textarea') ok(`${name}: field holds exactly the rewrite`, after === res.rewrite, JSON.stringify(after));
         await shot(tab, `page-${name}-after.png`);
+        // Undo is the page's own: check it brings the original back.
+        await tab.keyboard.down('Control'); await tab.keyboard.press('z'); await tab.keyboard.up('Control');
+        const undone = await tab.evaluate(() => { const b = document.querySelector('#box'); return b.value ?? b.innerText; });
+        ok(`${name}: Ctrl+Z in the page undoes it`, undone.replace(/\s+/g, ' ').includes(text.replace(/\s+/g, ' ').trim()), JSON.stringify(undone.slice(0, 60)));
       }
       if (expectReplace && url === '/textarea') {
         // Text edited in the panel is no longer the page's selection, so Replace mustn't be offered for it.
@@ -173,8 +149,6 @@ try {
     return res;
   }
 
-  const selectField = () => { const b = document.querySelector('#box'); b.focus(); b.setSelectionRange(0, b.value.length); return b.value; };
-  const selectNode = (sel) => new Function(`const n = document.querySelector(${JSON.stringify(sel)}); const r = document.createRange(); r.selectNodeContents(n); const s = getSelection(); s.removeAllRanges(); s.addRange(r); n.closest('[contenteditable]')?.focus(); return s.toString();`);
 
   // ONLY=email (comma-separated) runs a subset, to save keyless calls.
   const only = process.env.ONLY?.split(',');
