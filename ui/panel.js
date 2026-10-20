@@ -269,10 +269,10 @@ function renderHumanize(o, sent) {
   const parts = [
     h('div', { class: 'score', 'data-from': before, 'data-to': pct(o.ai_after), 'data-tone': t },
       h('div', {}, h('p', { class: 'label' }, o.passes ? 'No longer reads as AI' : 'Still reads as AI'),
-        h('p', { class: 'small muted' }, `AI Detection: ${LABELS[o.label_after] ?? 'unknown'}`)),
-      h('p', { class: `pct t-${t}` },
+        h('p', { class: 'small muted' }, `Detector model: ${LABELS[o.label_after] ?? 'unknown'}`)),
+      h('p', { class: `pct t-${t}`, title: 'Detector model, AI class' },
         o.ai_before != null ? h('span', { class: 'from' }, `${before}% → `) : null,
-        scoreNum(pct(o.ai_after)), h('small', {}, 'AI'))),
+        scoreNum(pct(o.ai_after)), h('small', {}, 'AI class'))),
     meter(o.ai_after, t),
     h('div', { class: 'rewrite' }, rewrite.trim()),
     h('div', { class: 'row' }, buttons),

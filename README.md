@@ -67,7 +67,7 @@ Only the text you select, and only when you choose Check or Rewrite (or click a 
 | `ui/panel.*` | The side panel. It makes the API call itself, because the browser can stop the background script during a minute-long rewrite. Motion is kept to the result: the score counts to its value and changes colour band by band, flagged sentences get a highlighter sweep, a rewrite wipes in. With reduced motion on, the end state shows at once. |
 | `ui/options.*` | The API key page. |
 
-Colours are the p3n.si tokens. The icon is the p3n pen from [zdresearch/p3n-web#4](https://github.com/zdresearch/p3n-web/pull/4) (`dev/logo-512.png` is the source). `python dev/icons.py` builds the browser icons on a light rounded tile, so they read on dark toolbars too; at 16 and 32 px they show only the pen.
+Colours are the p3n.si tokens. The icon is the p3n pen (`dev/logo-512.png` is the source). `python dev/icons.py` builds the browser icons on a light rounded tile, so they read on dark toolbars too; at 16 and 32 px they show only the pen.
 
 ## Develop and test
 
@@ -98,3 +98,7 @@ node dev/build.mjs
 It writes `dist/p3n-chrome-<version>.zip` (Chrome Web Store and Edge Add-ons take the same file) and `dist/p3n-firefox-<version>.zip` (addons.mozilla.org). The zips hold only what the extension needs. They're made with bsdtar (Windows' own `tar.exe`, macOS) or `zip` on Linux, because the stores need forward-slash paths; `Compress-Archive` from Windows PowerShell 5.1 writes backslashes.
 
 Before a Firefox listing: the ID `p3n@p3n.si` is permanent once used on addons.mozilla.org, and Mozilla's reviewers may prefer `authenticationInfo` as an optional data type (asked for when a key is added) rather than required.
+
+## Licence
+
+MIT, see [LICENSE](LICENSE).
