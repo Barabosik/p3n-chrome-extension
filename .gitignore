@@ -1,0 +1,7 @@
+# Dev tooling and the design/extension skills used while building (third-party, kept local)
+node_modules/
+dev/node_modules/
+dev/out/
+.claude/skills/
+.taste-skill/
+*.zip

@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Dev tools for the p3n extension (not shipped): an end-to-end check in a throwaway Chrome profile.",
+  "scripts": { "e2e": "node e2e.mjs" },
+  "devDependencies": { "puppeteer-core": "25.14.0" }
+}

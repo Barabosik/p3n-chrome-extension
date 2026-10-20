@@ -1,0 +1,285 @@
+import { runSkill, me, ApiError, LINKS, MAX_CHARS } from '../lib/api.js';
+import { captureSelection, replaceSelection } from '../lib/page.js';
+
+const $ = (s) => document.querySelector(s);
+const els = {
+  text: $('#text'), count: $('#count'), check: $('#check'), rewrite: $('#rewrite'), grab: $('#grab'), hint: $('#hint'),
+  busy: $('#busy'), busyText: $('#busy-text'), cancel: $('#cancel'), result: $('#result'), quota: $('#quota'), account: $('#account'),
+};
+const state = { key: '', windowId: null, source: null, controller: null, timer: null, free: null, last: null };
+
+// Tiny DOM builder. Strings become text nodes, so API text is never parsed as HTML.
+function h(tag, attrs = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === false || v == null) continue;
+    if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (k === 'class') el.className = v;
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  el.append(...kids.flat().filter((k) => k !== null && k !== undefined && k !== false));
+  return el;
+}
+
+const pct = (x) => Math.round((x || 0) * 100);
+const tone = (x) => (x >= 0.7 ? 'ai' : x >= 0.4 ? 'mid' : 'human');
+const LABELS = { human: 'Likely human-written', ai: 'Likely AI-written', ai_edited: 'AI-written, then edited', humanized: 'AI-written, then humanized', mixed: 'Mixed: part human, part AI' };
+const words = (t) => (t || '').trim().split(/\s+/).filter(Boolean).length;
+const clip = (t, n = 220) => (t && t.length > n ? t.slice(0, n - 1) + '…' : t);
+const limit = () => (state.key ? MAX_CHARS.key : MAX_CHARS.free);
+
+// ---- input -------------------------------------------------------------------------------
+
+function refreshInput() {
+  const n = els.text.value.trim().length;
+  els.count.textContent = n ? `${n.toLocaleString()} / ${limit().toLocaleString()} characters` : '';
+  els.count.classList.toggle('t-ai', n > limit());
+  const off = !n || !!state.controller;
+  els.check.disabled = off;
+  els.rewrite.disabled = off;
+}
+
+function hint(msg) {
+  els.hint.textContent = msg || '';
+  els.hint.hidden = !msg;
+}
+
+els.text.addEventListener('input', refreshInput);
+els.check.addEventListener('click', () => start('detect', els.text.value));
+els.rewrite.addEventListener('click', () => start('humanize', els.text.value));
+els.cancel.addEventListener('click', () => state.controller?.abort());
+els.grab.addEventListener('click', grabSelection);
+els.account.addEventListener('click', () => chrome.runtime.openOptionsPage());
+
+// Pulls the selection from the active tab. Works after the toolbar button or the right-click menu
+// opened the panel (both give one-time access to that tab).
+async function grabSelection() {
+  hint('');
+  const [tab] = await chrome.tabs.query({ active: true, windowId: state.windowId });
+  if (!tab) return;
+  try {
+    const results = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: captureSelection });
+    const hit = results.find((r) => r.result?.text?.trim());
+    if (!hit) return hint('Nothing is selected on the page. Select some text first.');
+    state.source = { tabId: tab.id, frameId: hit.frameId, editable: hit.result.editable, text: hit.result.text };
+    els.text.value = hit.result.text;
+    refreshInput();
+  } catch {
+    hint('p3n can\'t read this page from here. Select the text, right-click it and choose p3n, or paste it in the box.');
+  }
+}
+
+// ---- jobs from the right-click menu ------------------------------------------------------
+
+async function takeJob(job) {
+  if (!job || job.windowId !== state.windowId) return;
+  const { handled } = await chrome.storage.session.get('handled');
+  if (handled === job.id || Date.now() - job.at > 120_000) return;
+  await chrome.storage.session.set({ handled: job.id });
+  state.source = { tabId: job.tabId, frameId: job.frameId, editable: job.editable, text: job.text };
+  els.text.value = job.text;
+  refreshInput();
+  start(job.skill, job.text);
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'session' && changes.job?.newValue) takeJob(changes.job.newValue);
+  if (area === 'local' && 'apiKey' in changes) { state.key = changes.apiKey.newValue || ''; refreshInput(); refreshAccount(); }
+});
+
+// ---- running a skill ---------------------------------------------------------------------
+
+async function start(skill, text, options) {
+  text = (text || '').trim();
+  if (!text) return;
+  state.controller?.abort();
+  if (text.length > limit()) {
+    return showError(new ApiError(422, 'too_long', state.key
+      ? `That's ${text.length.toLocaleString()} characters; the API takes up to ${MAX_CHARS.key.toLocaleString()}. Select less.`
+      : `That's ${text.length.toLocaleString()} characters. Without an API key p3n takes up to ${MAX_CHARS.free.toLocaleString()}. Select less, or add a key.`));
+  }
+  const controller = new AbortController();
+  state.controller = controller;
+  els.result.replaceChildren();
+  setBusy(skill);
+  try {
+    const { run, free } = await runSkill(skill, text, { key: state.key, options, signal: controller.signal });
+    if (free !== null) { state.free = free; chrome.storage.session.set({ free }); }
+    state.last = { skill, text, run };
+    render(run, text);
+  } catch (e) {
+    if (e.name !== 'AbortError') showError(e);
+    if (e.free != null) { state.free = e.free; chrome.storage.session.set({ free: e.free }); }
+  } finally {
+    if (state.controller === controller) state.controller = null;
+    setBusy(null);
+    refreshInput();
+    refreshAccount();
+  }
+}
+
+function setBusy(skill) {
+  clearInterval(state.timer);
+  els.busy.hidden = !skill;
+  if (!skill) return;
+  const t0 = Date.now();
+  const what = skill === 'detect' ? 'Checking' : 'Rewriting';
+  const tick = () => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    els.busyText.textContent = `${what}… ${s} s` + (skill === 'humanize' && s > 8 ? ' (a rewrite takes up to a minute)' : '');
+  };
+  tick();
+  state.timer = setInterval(tick, 1000);
+}
+
+// ---- results -----------------------------------------------------------------------------
+
+function render(run, text) {
+  const body = run.skill === 'detect' ? renderDetect(run.output) : run.skill === 'humanize' ? renderHumanize(run.output, text) : [h('div', { class: 'rewrite' }, run.output?.text ?? '')];
+  const meta = h('p', { class: 'small muted' }, `${run.output?.version ?? run.skill}${run.cached ? ' · from cache' : ''}${state.key && run.charged_usd ? ` · $${Number(run.charged_usd).toFixed(4)}` : ''}`);
+  els.result.replaceChildren(h('div', { class: 'result-in', style: 'display:flex;flex-direction:column;gap:14px' }, body, meta));
+}
+
+function renderDetect(o) {
+  const t = tone(o.ai);
+  const parts = [
+    h('div', { class: 'score' },
+      h('p', { class: 'label' }, LABELS[o.label] ?? 'Unknown'),
+      h('p', { class: `pct t-${t}` }, `${pct(o.ai)}%`, h('small', {}, 'likely AI'))),
+    h('div', { class: 'meter' }, h('i', { class: `b-${t}`, style: `width:${Math.max(3, pct(o.ai))}%` })),
+  ];
+  if (o.verdict) parts.push(h('p', {}, o.verdict));
+  if (o.confidence?.level) parts.push(h('p', { class: 'small muted' }, `Confidence ${o.confidence.level}: ${o.confidence.reason ?? ''}`));
+  // The panel is narrow: the sentences come first, and a pattern hit is listed only if its sentence isn't already there.
+  const norm = (t) => (t || '').replace(/\s+/g, ' ').trim();
+  const shown = new Set((o.sentences ?? []).slice(0, 5).map((s) => norm(s.text)));
+  if (shown.size) {
+    parts.push(h('div', {}, h('h3', {}, 'Sentences that read as AI'),
+      h('ul', { class: 'quotes' }, o.sentences.slice(0, 5).map((s) => h('li', { class: 'hit' }, s.why ? h('span', { class: 'why' }, s.why) : null, h('q', {}, clip(s.text)))))));
+  }
+  const hits = (o.examples ?? []).filter((e) => !shown.has(norm(e.sentence))).slice(0, 6);
+  if (hits.length) {
+    parts.push(h('div', {}, h('h3', {}, 'Pattern hits'),
+      h('ul', { class: 'quotes' }, hits.map((e) => h('li', {},
+        h('span', { class: 'why' }, (e.rules ?? []).map((r) => String(r.name ?? '').replace(/\s*\(LLM\)$/, '')).join(' · ')),
+        h('q', {}, clip(e.sentence)))))));
+  }
+  parts.push(h('p', { class: 'small muted' }, 'A score is a probability, not proof. Read the sentences yourself before deciding anything about a person.'));
+  return parts;
+}
+
+function renderHumanize(o, sent) {
+  const t = tone(o.ai_after);
+  // The rewrite ends with a line break; keep only the trailing whitespace the selection itself had.
+  const rewrite = o.text.trimEnd() + (state.source?.text?.match(/\s*$/)?.[0] ?? '');
+  const replaceable = state.source?.editable && state.source.tabId != null;
+  const status = h('p', { class: 'small', hidden: true });
+  const copyBtn = h('button', { type: 'button', class: replaceable ? 'btn ghost' : 'btn accent' }, 'Copy');
+  copyBtn.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(rewrite.trim());
+    copyBtn.textContent = 'Copied';
+    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+  });
+  const buttons = [];
+  if (replaceable) {
+    const rep = h('button', { type: 'button', class: 'btn accent' }, 'Replace on the page');
+    rep.addEventListener('click', () => replaceOnPage(rewrite, rep, status));
+    buttons.push(rep);
+  }
+  buttons.push(copyBtn, h('button', { type: 'button', class: 'link small push', onclick: () => start('humanize', sent, { fresh: true }) }, 'Try another rewrite'));
+
+  const parts = [
+    h('div', { class: 'score' },
+      h('div', {}, h('p', { class: 'label' }, o.passes ? 'No longer reads as AI' : 'Still reads as AI'),
+        h('p', { class: 'small muted' }, `AI Detection: ${LABELS[o.label_after] ?? 'unknown'}`)),
+      h('p', { class: `pct t-${t}` },
+        o.ai_before != null ? h('span', { class: 'from' }, `${pct(o.ai_before)}% → `) : null,
+        `${pct(o.ai_after)}%`, h('small', {}, 'AI'))),
+    h('div', { class: 'rewrite' }, rewrite.trim()),
+    h('div', { class: 'row' }, buttons),
+    status,
+  ];
+  if (words(o.text) / Math.max(1, words(sent)) < 0.6) {
+    parts.push(h('p', { class: 'note warn small' }, `Kept ${words(o.text)} of ${words(sent)} words. Most of this text was general statements with no facts in them, and those are what reads as AI. Add the specifics you meant (who, what, numbers) and run it again.`));
+  }
+  if (o.invented_blocked?.length) {
+    parts.push(h('p', { class: 'small muted' }, `Kept as sent where a rewrite added ${o.invented_blocked.join(', ')}, which the text does not have.`));
+  }
+  parts.push(h('p', { class: 'small muted' }, 'Humanize drops filler and general statements that carry no fact. Check that every claim you need is still there.'));
+  return parts;
+}
+
+async function replaceOnPage(text, button, status) {
+  const s = state.source;
+  const say = (msg, kind) => { status.textContent = msg; status.className = `note small ${kind}`; status.hidden = false; };
+  try {
+    const [res] = await chrome.scripting.executeScript({ target: { tabId: s.tabId, frameIds: [s.frameId ?? 0] }, func: replaceSelection, args: [text] });
+    const r = res?.result;
+    if (r?.ok) {
+      button.textContent = 'Replaced';
+      button.disabled = true;
+      return say('Replaced on the page. Ctrl+Z (Cmd+Z on a Mac) in the page undoes it.', 'ok');
+    }
+    const why = { changed: 'The text on the page changed since you selected it.', gone: 'That text box is gone from the page.', not_editable: 'That text isn\'t in a box you can type in.' }[r?.reason] ?? 'p3n couldn\'t put the text back.';
+    say(`${why} Copy the rewrite and paste it instead.`, 'warn');
+  } catch {
+    say('The page was reloaded or changed, so p3n can\'t edit it any more. Copy the rewrite and paste it instead.', 'warn');
+  }
+}
+
+function showError(e) {
+  const kids = [];
+  const keyBtn = (label) => h('button', { type: 'button', class: 'btn ghost', onclick: () => chrome.runtime.openOptionsPage() }, label);
+  switch (e.type) {
+    case 'free_limit': {
+      const mins = e.retryAfter ? Math.max(1, Math.ceil(e.retryAfter / 60)) : null;
+      kids.push(h('p', {}, `The free checks for this hour are used up${mins ? `; more in about ${mins} min` : ''}.`),
+        h('p', { class: 'small' }, 'Sign up for free credit and an API key, then paste the key here to keep going.'),
+        h('div', { class: 'row' }, h('a', { class: 'btn accent', href: e.signupUrl || LINKS.signup, target: '_blank', rel: 'noopener', style: 'text-decoration:none' }, 'Sign up'), keyBtn('Add an API key')));
+      break;
+    }
+    case 'insufficient_credit':
+      kids.push(h('p', {}, 'Your p3n balance is too low for this.'),
+        h('div', { class: 'row' }, h('a', { class: 'btn accent', href: LINKS.billing, target: '_blank', rel: 'noopener', style: 'text-decoration:none' }, 'Top up')));
+      break;
+    case 'unauthorized':
+      kids.push(h('p', {}, 'p3n didn\'t accept your API key. It may have been revoked.'), h('div', { class: 'row' }, keyBtn('Change the key')));
+      break;
+    case 'rate_limited':
+      kids.push(h('p', {}, 'Too many requests at once. Wait a minute and try again.'));
+      break;
+    default:
+      kids.push(h('p', {}, e.message || 'Something went wrong.'));
+  }
+  els.result.replaceChildren(h('div', { class: 'note error result-in', style: 'display:flex;flex-direction:column;gap:8px' }, kids));
+}
+
+// ---- account / quota ---------------------------------------------------------------------
+
+async function refreshAccount() {
+  els.account.textContent = state.key ? 'API key' : 'Add API key';
+  if (!state.key) {
+    els.quota.textContent = state.free != null
+      ? `${state.free} free ${state.free === 1 ? 'call' : 'calls'} left this hour without a key.`
+      : 'Free without a key: 10 calls an hour, up to 5,000 characters each.';
+    return;
+  }
+  try {
+    const m = await me(state.key);
+    els.quota.textContent = `Balance $${Number(m.balance_usd).toFixed(2)} · key ${m.key?.name ?? m.key?.prefix ?? ''}`;
+  } catch (e) {
+    els.quota.textContent = e.type === 'unauthorized' ? 'Your API key wasn\'t accepted. Change it in the settings.' : '';
+  }
+}
+
+// ---- boot --------------------------------------------------------------------------------
+
+(async () => {
+  state.windowId = (await chrome.windows.getCurrent()).id;
+  const [{ apiKey }, { job, free }] = await Promise.all([chrome.storage.local.get('apiKey'), chrome.storage.session.get(['job', 'free'])]);
+  state.key = apiKey || '';
+  state.free = free ?? null;
+  refreshInput();
+  refreshAccount();
+  takeJob(job);
+})();
