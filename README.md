@@ -62,7 +62,7 @@ npm install
 npm run e2e
 ```
 
-- It calls the live API without a key, which uses 3 of the 10 free calls an hour. `MOCK=1` answers with canned API runs instead.
+- It calls the live API without a key, which uses 4 of the 10 free calls an hour. `MOCK=1` answers with canned API runs instead.
 - `ONLY=email` (comma-separated: `article`, `textarea`, `email`) runs some of the scenarios.
 - `CHROME=path/to/chrome` if Chrome isn't in the default Windows location.
 - Captures land in `dev/out/`. `python dev/store-shots.py` builds the 1280x800 store screenshots in `store/` from them (needs Pillow).

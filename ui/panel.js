@@ -172,7 +172,8 @@ function renderHumanize(o, sent) {
   const t = tone(o.ai_after);
   // The rewrite ends with a line break; keep only the trailing whitespace the selection itself had.
   const rewrite = o.text.trimEnd() + (state.source?.text?.match(/\s*$/)?.[0] ?? '');
-  const replaceable = state.source?.editable && state.source.tabId != null;
+  // Only offer Replace when what was rewritten is still the page's selection, not text edited in the panel.
+  const replaceable = state.source?.editable && state.source.tabId != null && state.source.text.trim() === sent;
   const status = h('p', { class: 'small', hidden: true });
   const copyBtn = h('button', { type: 'button', class: replaceable ? 'btn ghost' : 'btn accent' }, 'Copy');
   copyBtn.addEventListener('click', async () => {

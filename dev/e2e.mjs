@@ -1,4 +1,4 @@
-// End-to-end check in a throwaway Chrome profile, against the live API (uses 3 keyless calls).
+// End-to-end check in a throwaway Chrome profile, against the live API (uses 4 keyless calls).
 //   cd dev && npm install && npm run e2e        (CHROME=path/to/chrome to override)
 // A script can't click Chrome's own right-click menu, so it loads a dev copy of the extension that
 // also has host access to the local test server, and starts the same startJob the menu does, by message.
@@ -132,6 +132,13 @@ try {
         }
         if (url === '/textarea') ok(`${name}: field holds exactly the rewrite`, after === res.rewrite, JSON.stringify(after));
         await shot(tab, `page-${name}-after.png`);
+      }
+      if (expectReplace && url === '/textarea') {
+        // Text edited in the panel is no longer the page's selection, so Replace mustn't be offered for it.
+        await panel.evaluate((t) => { const el = document.querySelector('#text'); el.value = t; el.dispatchEvent(new Event('input')); document.querySelector('#rewrite').click(); }, `${text} We ship it in two weeks.`);
+        await panel.waitForFunction(() => document.querySelector('#result')?.textContent.trim().length > 0 && document.querySelector('#busy').hidden, { timeout: 120000 });
+        const edited = await panel.evaluate(() => ({ err: !!document.querySelector('#result .note.error'), replace: [...document.querySelectorAll('#result button')].some((b) => b.textContent.startsWith('Replace')) }));
+        ok(`${name}: no Replace for text edited in the panel`, !edited.err && !edited.replace);
       }
     }
     await shot(tab, `page-${name}.png`);
