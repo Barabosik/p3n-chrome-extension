@@ -16,4 +16,4 @@ def shot(page, panel, name):
     print(name, c.size)
 
 shot("page-article.png", "panel-article.png", "screenshot-check.png")
-shot("page-email-after.png", "panel-email.png", "screenshot-rewrite.png")
+shot("page-email-after.png", "panel-email-replaced.png", "screenshot-rewrite.png")

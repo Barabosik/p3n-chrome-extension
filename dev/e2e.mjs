@@ -65,7 +65,12 @@ try {
   ok('extension installs', !!id, id);
   const swTarget = await browser.waitForTarget((t) => t.type() === 'service_worker' && t.url().startsWith(`chrome-extension://${id}/`), { timeout: 15000 });
   const sw = await swTarget.worker();
-  const menus = await sw.evaluate(async () => Promise.all(['p3n', 'p3n-detect', 'p3n-humanize'].map((m) => chrome.contextMenus.update(m, {}).then(() => true, () => false))));
+  // onInstalled may still be creating the menus: ask a few times.
+  let menus = [];
+  for (let i = 0; i < 10 && !(menus.length && menus.every(Boolean)); i++) {
+    if (i) await new Promise((r) => setTimeout(r, 300));
+    menus = await sw.evaluate(async () => Promise.all(['p3n', 'p3n-detect', 'p3n-humanize'].map((m) => chrome.contextMenus.update(m, {}).then(() => true, () => false))));
+  }
   ok('context menus exist (p3n > Check for AI, Rewrite)', menus.every(Boolean), String(menus));
 
   const watch = (p, name) => {
@@ -81,7 +86,14 @@ try {
   // A tab behind the panel paints no frames in headless Chrome, so its screenshot can wait forever.
   const shot = async (p, file) => { await p.bringToFront(); await p.screenshot({ path: path.join(OUT, file) }); };
 
-  async function scenario({ name, url, skill, select, expectReplace }) {
+  // The score counts to its value: true once the number on screen is the stated one and the bar is at rest.
+  const scoreSettled = () => {
+    const n = document.querySelector('.score .num');
+    const sr = document.querySelector('.score .sr');
+    return !!n && n.textContent === sr.textContent && !document.querySelector('.meter i')?.style.transform;
+  };
+
+  async function scenario({ name, url, skill, select, expectReplace, calm }) {
     const tab = await browser.newPage();
     watch(tab, name);
     await tab.setViewport({ width: 900, height: 800 });
@@ -91,6 +103,7 @@ try {
     const panel = await browser.newPage();
     watch(panel, `${name} panel`);
     await panel.setViewport({ width: 380, height: 900 });
+    if (calm) await panel.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
     if (MOCK) {
       await panel.setRequestInterception(true);
       panel.on('request', (r) => (r.url().startsWith('https://api.p3n.si/v1/')
@@ -103,7 +116,7 @@ try {
 
     const t0 = Date.now();
     await panel.evaluate((s, info, t) => chrome.runtime.sendMessage({ p3nTest: 'startJob', args: [s, info, t] }), skill, { selectionText: text, frameId: 0 }, { id: tabId, windowId });
-    await panel.waitForFunction(() => document.querySelector('#result')?.textContent.trim().length > 0 && document.querySelector('#busy').hidden, { timeout: 120000 });
+    await panel.waitForFunction(() => document.querySelector('#result')?.textContent.trim().length > 0 && document.querySelector('#busy').hidden, { timeout: 120000, polling: 100 });
     const secs = ((Date.now() - t0) / 1000).toFixed(1);
     const res = await panel.evaluate(() => ({
       text: document.querySelector('#text').value,
@@ -115,7 +128,16 @@ try {
     }));
     ok(`${name}: selection reaches the panel`, res.text.replace(/\s+/g, ' ').trim() === text.replace(/\s+/g, ' ').trim());
     ok(`${name}: ${skill} result shows`, !res.isError && res.result.length > 40, res.isError ? res.result.slice(0, 160) : `${secs} s, ${res.quota}`);
-    await new Promise((r) => setTimeout(r, 400)); // let the result fade in
+    if (calm && !res.isError) ok(`${name}: reduced motion shows the final score at once`, await panel.evaluate(scoreSettled));
+    // FRAMES=1 keeps a few frames of the result arriving, to look at the motion.
+    if (process.env.FRAMES) {
+      for (const [i, ms] of [0, 120, 250, 400, 600, 900].entries()) {
+        await new Promise((r) => setTimeout(r, i ? ms - [0, 120, 250, 400, 600, 900][i - 1] : 0));
+        await panel.screenshot({ path: path.join(OUT, `frame-${name}-${i}.png`) });
+      }
+    }
+    await new Promise((r) => setTimeout(r, 1300)); // let the result arrive and the score finish counting
+    if (!res.isError) ok(`${name}: score ends on the stated value`, await panel.evaluate(scoreSettled));
     await panel.screenshot({ path: path.join(OUT, `panel-${name}.png`), fullPage: true });
 
     if (skill === 'humanize' && !res.isError) {
@@ -125,6 +147,8 @@ try {
         await panel.waitForFunction(() => !document.querySelector('#result .note.small')?.hidden, { timeout: 10000 }).catch(() => {});
         const after = await tab.evaluate(() => { const b = document.querySelector('#box'); return b.value ?? b.innerText; });
         const status = await panel.evaluate(() => [...document.querySelectorAll('#result .note')].map((n) => n.textContent).join(' | '));
+        await new Promise((r) => setTimeout(r, 500)); // the check mark draws
+        await panel.screenshot({ path: path.join(OUT, `panel-${name}-replaced.png`), fullPage: true });
         ok(`${name}: Replace puts the rewrite on the page`, after.replace(/\s+/g, ' ').includes(res.rewrite.replace(/\s+/g, ' ').trim()), status);
         if (url === '/rich') {
           ok(`${name}: text around the selection is kept`, after.includes('Hi team,') && after.includes('Thanks'));
@@ -135,8 +159,9 @@ try {
       }
       if (expectReplace && url === '/textarea') {
         // Text edited in the panel is no longer the page's selection, so Replace mustn't be offered for it.
+        await panel.bringToFront(); // a background tab gets no animation frames in headless Chrome
         await panel.evaluate((t) => { const el = document.querySelector('#text'); el.value = t; el.dispatchEvent(new Event('input')); document.querySelector('#rewrite').click(); }, `${text} We ship it in two weeks.`);
-        await panel.waitForFunction(() => document.querySelector('#result')?.textContent.trim().length > 0 && document.querySelector('#busy').hidden, { timeout: 120000 });
+        await panel.waitForFunction(() => document.querySelector('#result')?.textContent.trim().length > 0 && document.querySelector('#busy').hidden, { timeout: 120000, polling: 100 });
         const edited = await panel.evaluate(() => ({ err: !!document.querySelector('#result .note.error'), replace: [...document.querySelectorAll('#result button')].some((b) => b.textContent.startsWith('Replace')) }));
         ok(`${name}: no Replace for text edited in the panel`, !edited.err && !edited.replace);
       }
@@ -156,7 +181,7 @@ try {
   const scenarios = [
     { name: 'article', url: '/static', skill: 'detect', select: selectNode('#box') },
     { name: 'textarea', url: '/textarea', skill: 'humanize', select: selectField, expectReplace: true },
-    { name: 'email', url: '/rich', skill: 'humanize', select: selectNode('#box div:nth-child(2)'), expectReplace: true },
+    { name: 'email', url: '/rich', skill: 'humanize', select: selectNode('#box div:nth-child(2)'), expectReplace: true, calm: true },
   ];
   for (const s of scenarios) if (!only || only.includes(s.name)) await scenario(s);
 

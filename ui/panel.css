@@ -8,17 +8,34 @@ header.bar { display: flex; align-items: center; justify-content: space-between;
 
 .input { display: flex; flex-direction: column; gap: 8px; }
 
-.busy { display: flex; flex-direction: column; gap: 8px; }
+/* Busy: shows only after a beat, so an instant (cached) result doesn't flash it. */
+.busy { display: flex; flex-direction: column; gap: 8px; animation: appear var(--t-ui) var(--ease-out) 150ms both; }
 .progress { height: 4px; border-radius: 2px; background: var(--rule); overflow: hidden; }
-.progress i { display: block; height: 100%; width: 30%; background: var(--accent); border-radius: 2px; animation: slide 1.2s ease-in-out infinite; }
-@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
-@media (prefers-reduced-motion: reduce) { .progress i { animation: none; width: 100%; opacity: .5; } }
+.progress i { display: block; height: 100%; width: 40%; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--accent) 70%); animation: slide 1.4s var(--ease-in-out) infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@keyframes appear { from { opacity: 0; } }
 
+/* A selection arriving from the page lands in the box with a brief highlight. */
+textarea.arrived { animation: arrive 900ms var(--ease-out); }
+@keyframes arrive { from { background-color: var(--highlight); } }
+
+/* The result: parts arrive in reading order (--i is set in panel.js), the score runs, flagged sentences get
+   highlighted like a pen stroke, and a rewrite wipes in. */
 #result { display: flex; flex-direction: column; gap: 14px; }
 #result:empty { display: none; }
-.result-in { animation: fade .2s ease-out; }
-@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .result-in { animation: none; } }
+.result-in > * { animation: rise var(--t-ui) var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 6) * 50ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+.rewrite { -webkit-mask: linear-gradient(180deg, #000 40%, transparent 60%) 0 100% / 100% 260% no-repeat; animation: wipe 650ms var(--ease-out) 100ms both; }
+@keyframes wipe { from { -webkit-mask-position: 0 100%; } to { -webkit-mask-position: 0 0; } }
+.quotes li.hit q { background: linear-gradient(var(--highlight), var(--highlight)) no-repeat 0 0 / 0% 100%; animation: sweep 600ms var(--ease-out) both; animation-delay: calc(250ms + min(var(--j, 0), 4) * 140ms); }
+@keyframes sweep { to { background-size: 100% 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .progress i { animation: none; width: 100%; background: var(--accent); opacity: .5; }
+  .result-in > * { animation: appear 150ms ease both; }
+  .rewrite { -webkit-mask: none; animation: none; }
+  .quotes li.hit q { animation: none; background-size: 100% 100%; }
+}
 
 .score { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .score .label { font-size: 20px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
@@ -26,7 +43,8 @@ header.bar { display: flex; align-items: center; justify-content: space-between;
 .score .pct small { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 4px; }
 .score .pct .from { font-size: 20px; color: var(--muted); font-weight: 600; }
 .meter { height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; }
-.meter i { display: block; height: 100%; }
+.meter i { display: block; height: 100%; transform-origin: left; transition: background-color var(--t-hover) ease; }
+.score .pct { transition: color var(--t-hover) ease; }
 
 .t-ai { color: var(--accent); } .b-ai { background: var(--accent); }
 .t-mid { color: var(--amber); } .b-mid { background: var(--amber-bar); }
@@ -35,7 +53,7 @@ header.bar { display: flex; align-items: center; justify-content: space-between;
 h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
 .quotes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .quotes li { padding: 8px 10px; border-radius: var(--radius); background: var(--tint); font-size: 14px; }
-.quotes li.hit { background: #fbeee6; }
+.quotes q { padding: 1px 0; }
 .quotes .why { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
 .quotes q { font-style: italic; }
 

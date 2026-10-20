@@ -9,6 +9,9 @@ function say(msg, kind = '') {
   status.textContent = msg;
   status.className = `note small ${kind}`;
   status.hidden = !msg;
+  if (msg && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    status.animate([{ opacity: 0, transform: 'translateY(4px)' }, {}], { duration: 200, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+  }
 }
 
 // Checks the key with p3n and saves it only if it works, so a typo never replaces a good key.

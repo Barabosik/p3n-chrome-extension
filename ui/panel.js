@@ -27,6 +27,72 @@ const LABELS = { human: 'Likely human-written', ai: 'Likely AI-written', ai_edit
 const words = (t) => (t || '').trim().split(/\s+/).filter(Boolean).length;
 const clip = (t, n = 220) => (t && t.length > n ? t.slice(0, n - 1) + '…' : t);
 const limit = () => (state.key ? MAX_CHARS.key : MAX_CHARS.free);
+const calm = matchMedia('(prefers-reduced-motion: reduce)');
+
+// ---- motion ------------------------------------------------------------------------------
+
+// The one moment that moves: the score runs from where the text was to where it is now (0 for a check, the
+// score before for a rewrite), and the number and the bar take the colour of each band they pass through.
+// The markup already holds the end state, so reduced motion or a failed frame shows the right result.
+function runScore(root) {
+  const score = root.querySelector('[data-to]');
+  const num = score?.querySelector('.num');
+  if (!num) return;
+  const pctEl = score.querySelector('.pct');
+  const bar = root.querySelector('.meter i');
+  const from = Number(score.dataset.from);
+  const to = Number(score.dataset.to);
+  if (calm.matches || from === to) return;
+  const draw = (v, t = tone(v / 100)) => {
+    num.textContent = `${Math.round(v)}%`;
+    pctEl.classList.remove('t-ai', 't-mid', 't-human');
+    pctEl.classList.add(`t-${t}`);
+    if (bar) bar.className = `b-${t}`;
+  };
+  const scale = (v) => { if (bar) bar.style.transform = `scaleX(${Math.max(3, v) / Math.max(3, to)})`; };
+  const t0 = performance.now() + 120;
+  const ms = 800;
+  draw(from);
+  scale(from);
+  const step = (now) => {
+    if (!num.isConnected) return;
+    const p = Math.min(1, Math.max(0, (now - t0) / ms));
+    const v = from + (to - from) * (1 - (1 - p) ** 4);
+    if (p < 1) {
+      draw(v);
+      scale(v);
+      requestAnimationFrame(step);
+    } else {
+      draw(to, score.dataset.tone);
+      if (bar) bar.style.transform = '';
+    }
+  };
+  requestAnimationFrame(step);
+}
+
+// Result parts arrive in reading order.
+function stagger(box) {
+  [...box.children].forEach((c, i) => c.style.setProperty('--i', i));
+  return box;
+}
+
+// Text arriving from the page lands in the box with a brief highlight.
+function arrived() {
+  els.text.classList.remove('arrived');
+  void els.text.offsetWidth; // restart the animation
+  els.text.classList.add('arrived');
+}
+
+// A check mark that draws itself, for Copied and Replaced.
+function checkMark() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  const path = document.createElementNS(ns, 'path');
+  for (const [k, v] of Object.entries({ viewBox: '0 0 16 16', class: 'tick', 'aria-hidden': 'true' })) svg.setAttribute(k, v);
+  for (const [k, v] of Object.entries({ d: 'M3 8.5l3.2 3L13 4.5', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })) path.setAttribute(k, v);
+  svg.append(path);
+  return svg;
+}
 
 // ---- input -------------------------------------------------------------------------------
 
@@ -63,6 +129,7 @@ async function grabSelection() {
     if (!hit) return hint('Nothing is selected on the page. Select some text first.');
     state.source = { tabId: tab.id, frameId: hit.frameId, editable: hit.result.editable, text: hit.result.text };
     els.text.value = hit.result.text;
+    arrived();
     refreshInput();
   } catch {
     hint('p3n can\'t read this page from here. Select the text, right-click it and choose p3n, or paste it in the box.');
@@ -78,6 +145,7 @@ async function takeJob(job) {
   await chrome.storage.session.set({ handled: job.id });
   state.source = { tabId: job.tabId, frameId: job.frameId, editable: job.editable, text: job.text };
   els.text.value = job.text;
+  arrived();
   refreshInput();
   start(job.skill, job.text);
 }
@@ -137,16 +205,22 @@ function setBusy(skill) {
 function render(run, text) {
   const body = run.skill === 'detect' ? renderDetect(run.output) : run.skill === 'humanize' ? renderHumanize(run.output, text) : [h('div', { class: 'rewrite' }, run.output?.text ?? '')];
   const meta = h('p', { class: 'small muted' }, `${run.output?.version ?? run.skill}${run.cached ? ' · from cache' : ''}${state.key && run.charged_usd ? ` · $${Number(run.charged_usd).toFixed(4)}` : ''}`);
-  els.result.replaceChildren(h('div', { class: 'result-in', style: 'display:flex;flex-direction:column;gap:14px' }, body, meta));
+  const box = stagger(h('div', { class: 'result-in', style: 'display:flex;flex-direction:column;gap:14px' }, body, meta));
+  els.result.replaceChildren(box);
+  runScore(box);
 }
+
+// The big number: animated for the eye, stated once for screen readers (the result is a live region).
+const scoreNum = (p) => [h('span', { class: 'num', 'aria-hidden': 'true' }, `${p}%`), h('span', { class: 'sr' }, `${p}%`)];
+const meter = (x, t) => h('div', { class: 'meter' }, h('i', { class: `b-${t}`, style: `width:${Math.max(3, pct(x))}%` }));
 
 function renderDetect(o) {
   const t = tone(o.ai);
   const parts = [
-    h('div', { class: 'score' },
+    h('div', { class: 'score', 'data-from': 0, 'data-to': pct(o.ai), 'data-tone': t },
       h('p', { class: 'label' }, LABELS[o.label] ?? 'Unknown'),
-      h('p', { class: `pct t-${t}` }, `${pct(o.ai)}%`, h('small', {}, 'likely AI'))),
-    h('div', { class: 'meter' }, h('i', { class: `b-${t}`, style: `width:${Math.max(3, pct(o.ai))}%` })),
+      h('p', { class: `pct t-${t}` }, scoreNum(pct(o.ai)), h('small', {}, 'likely AI'))),
+    meter(o.ai, t),
   ];
   if (o.verdict) parts.push(h('p', {}, o.verdict));
   if (o.confidence?.level) parts.push(h('p', { class: 'small muted' }, `Confidence ${o.confidence.level}: ${o.confidence.reason ?? ''}`));
@@ -155,7 +229,7 @@ function renderDetect(o) {
   const shown = new Set((o.sentences ?? []).slice(0, 5).map((s) => norm(s.text)));
   if (shown.size) {
     parts.push(h('div', {}, h('h3', {}, 'Sentences that read as AI'),
-      h('ul', { class: 'quotes' }, o.sentences.slice(0, 5).map((s) => h('li', { class: 'hit' }, s.why ? h('span', { class: 'why' }, s.why) : null, h('q', {}, clip(s.text)))))));
+      h('ul', { class: 'quotes' }, o.sentences.slice(0, 5).map((s, j) => h('li', { class: 'hit', style: `--j:${j}` }, s.why ? h('span', { class: 'why' }, s.why) : null, h('q', {}, clip(s.text)))))));
   }
   const hits = (o.examples ?? []).filter((e) => !shown.has(norm(e.sentence))).slice(0, 6);
   if (hits.length) {
@@ -178,8 +252,9 @@ function renderHumanize(o, sent) {
   const copyBtn = h('button', { type: 'button', class: replaceable ? 'btn ghost' : 'btn accent' }, 'Copy');
   copyBtn.addEventListener('click', async () => {
     await navigator.clipboard.writeText(rewrite.trim());
-    copyBtn.textContent = 'Copied';
-    setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+    copyBtn.replaceChildren(checkMark(), 'Copied');
+    clearTimeout(copyBtn.reset);
+    copyBtn.reset = setTimeout(() => copyBtn.replaceChildren('Copy'), 1500);
   });
   const buttons = [];
   if (replaceable) {
@@ -189,13 +264,15 @@ function renderHumanize(o, sent) {
   }
   buttons.push(copyBtn, h('button', { type: 'button', class: 'link small push', onclick: () => start('humanize', sent, { fresh: true }) }, 'Try another rewrite'));
 
+  const before = o.ai_before != null ? pct(o.ai_before) : pct(o.ai_after);
   const parts = [
-    h('div', { class: 'score' },
+    h('div', { class: 'score', 'data-from': before, 'data-to': pct(o.ai_after), 'data-tone': t },
       h('div', {}, h('p', { class: 'label' }, o.passes ? 'No longer reads as AI' : 'Still reads as AI'),
         h('p', { class: 'small muted' }, `AI Detection: ${LABELS[o.label_after] ?? 'unknown'}`)),
       h('p', { class: `pct t-${t}` },
-        o.ai_before != null ? h('span', { class: 'from' }, `${pct(o.ai_before)}% → `) : null,
-        `${pct(o.ai_after)}%`, h('small', {}, 'AI'))),
+        o.ai_before != null ? h('span', { class: 'from' }, `${before}% → `) : null,
+        scoreNum(pct(o.ai_after)), h('small', {}, 'AI'))),
+    meter(o.ai_after, t),
     h('div', { class: 'rewrite' }, rewrite.trim()),
     h('div', { class: 'row' }, buttons),
     status,
@@ -217,7 +294,8 @@ async function replaceOnPage(text, button, status) {
     const [res] = await chrome.scripting.executeScript({ target: { tabId: s.tabId, frameIds: [s.frameId ?? 0] }, func: replaceSelection, args: [text] });
     const r = res?.result;
     if (r?.ok) {
-      button.textContent = 'Replaced';
+      button.replaceChildren(checkMark(), 'Replaced');
+      button.className = 'btn ok';
       button.disabled = true;
       return say('Replaced on the page. Ctrl+Z (Cmd+Z on a Mac) in the page undoes it.', 'ok');
     }
@@ -252,7 +330,7 @@ function showError(e) {
     default:
       kids.push(h('p', {}, e.message || 'Something went wrong.'));
   }
-  els.result.replaceChildren(h('div', { class: 'note error result-in', style: 'display:flex;flex-direction:column;gap:8px' }, kids));
+  els.result.replaceChildren(stagger(h('div', { class: 'note error result-in', style: 'display:flex;flex-direction:column;gap:8px' }, kids)));
 }
 
 // ---- account / quota ---------------------------------------------------------------------
