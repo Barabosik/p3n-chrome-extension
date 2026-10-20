@@ -47,7 +47,7 @@ Only the text you select, and only when you choose Check or Rewrite (or click a 
 | `background.js` | Creates the menu. On a click, opens the side panel, reads the selection from the page and hands the job to the panel through `chrome.storage.session`. |
 | `lib/page.js` | The two functions injected into the page: capture the selection, and replace it (`execCommand('insertText')` so undo works, with fallbacks). Replace refuses if the text changed since you selected it. |
 | `lib/api.js` | The API client: `POST /v1/detect` and `/v1/humanize`, polls `/v1/runs/{id}` for long texts, turns API errors into readable ones. |
-| `ui/panel.*` | The side panel. It makes the API call itself, because Chrome can stop a service worker during a minute-long rewrite. |
+| `ui/panel.*` | The side panel. It makes the API call itself, because Chrome can stop a service worker during a minute-long rewrite. Motion is kept to the result: the score counts to its value and changes colour band by band, flagged sentences get a highlighter sweep, a rewrite wipes in. With reduced motion on, the end state shows at once. |
 | `ui/options.*` | The API key page. |
 
 Colours are the p3n.si tokens. The icon is the p3n pen from [zdresearch/p3n-web#4](https://github.com/zdresearch/p3n-web/pull/4) (`dev/logo-512.png` is the source).
@@ -65,6 +65,7 @@ npm run e2e
 - It calls the live API without a key, which uses 4 of the 10 free calls an hour. `MOCK=1` answers with canned API runs instead.
 - `ONLY=email` (comma-separated: `article`, `textarea`, `email`) runs some of the scenarios.
 - `CHROME=path/to/chrome` if Chrome isn't in the default Windows location.
+- `FRAMES=1` also saves frames of each result arriving (`dev/out/frame-*.png`), to look at the motion.
 - Captures land in `dev/out/`. `python dev/store-shots.py` builds the 1280x800 store screenshots in `store/` from them (needs Pillow).
 
 A script can't click Chrome's own right-click menu, so the test starts jobs by message instead. The menu itself is checked to exist, but clicking it is a manual check.
