@@ -1,4 +1,4 @@
-import { runSkill, me, ApiError, LINKS, MAX_CHARS, MIN_DETECT_CHARS } from '../lib/api.js';
+import { runSkill, me, ApiError, LINKS, SITE, MAX_CHARS, MIN_DETECT_CHARS } from '../lib/api.js';
 import { captureSelection, replaceSelection } from '../lib/page.js';
 import { ext } from '../lib/ext.js';
 
@@ -329,9 +329,11 @@ function showError(e) {
   switch (e.type) {
     case 'free_limit': {
       const mins = e.retryAfter ? Math.max(1, Math.ceil(e.retryAfter / 60)) : null;
+      // The link comes from the API's answer: follow it only to p3n's own site.
+      const signup = e.signupUrl?.startsWith(`${SITE}/`) ? e.signupUrl : LINKS.signup;
       kids.push(h('p', {}, `The free checks for this hour are used up${mins ? `; more in about ${mins} min` : ''}.`),
         h('p', { class: 'small' }, 'Sign up for free credit and an API key, then paste the key here to keep going.'),
-        h('div', { class: 'row' }, h('a', { class: 'btn accent', href: e.signupUrl || LINKS.signup, target: '_blank', rel: 'noopener', style: 'text-decoration:none' }, 'Sign up'), keyBtn('Add an API key')));
+        h('div', { class: 'row' }, h('a', { class: 'btn accent', href: signup, target: '_blank', rel: 'noopener', style: 'text-decoration:none' }, 'Sign up'), keyBtn('Add an API key')));
       break;
     }
     case 'insufficient_credit':
