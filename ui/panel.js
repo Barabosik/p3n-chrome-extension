@@ -175,6 +175,8 @@ async function start(skill, text, options) {
   }
   const controller = new AbortController();
   state.controller = controller;
+  // Try another rewrite is inside the result: clearing it drops keyboard focus, so bring it back after.
+  const refocus = els.result.contains(document.activeElement);
   els.result.replaceChildren();
   setBusy(skill);
   try {
@@ -190,7 +192,15 @@ async function start(skill, text, options) {
     setBusy(null);
     refreshInput();
     refreshAccount();
+    if (refocus) focusOn(els.result.firstElementChild);
   }
+}
+
+// Moves keyboard focus to something that isn't focusable by itself (a result, a status line).
+function focusOn(el) {
+  if (!el) return;
+  el.tabIndex = -1;
+  el.focus({ preventScroll: true });
 }
 
 function setBusy(skill) {
@@ -311,10 +321,13 @@ async function replaceOnPage(text, button, status) {
     const [res] = await ext.scripting.executeScript({ target: { tabId: s.tabId, frameIds: [s.frameId ?? 0] }, func: replaceSelection, args: [text] });
     const r = res?.result;
     if (r?.ok) {
+      const hadFocus = document.activeElement === button;
       button.replaceChildren(checkMark(), 'Replaced');
       button.className = 'btn ok';
-      button.disabled = true;
-      return say('Replaced on the page. Ctrl+Z (Cmd+Z on a Mac) in the page undoes it.', 'ok');
+      button.disabled = true; // a disabled button loses focus: keep it on the status that says what happened
+      say('Replaced on the page. Ctrl+Z (Cmd+Z on a Mac) in the page undoes it.', 'ok');
+      if (hadFocus) focusOn(status);
+      return;
     }
     const why = { changed: 'The text on the page changed since you selected it.', gone: 'That text box is gone from the page.', not_editable: 'That text isn\'t in a box you can type in.', replaced: 'p3n already replaced that selection.' }[r?.reason] ?? 'p3n couldn\'t put the text back.';
     say(`${why} Copy the rewrite and paste it instead.`, 'warn');
