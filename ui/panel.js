@@ -316,7 +316,7 @@ async function replaceOnPage(text, button, status) {
       button.disabled = true;
       return say('Replaced on the page. Ctrl+Z (Cmd+Z on a Mac) in the page undoes it.', 'ok');
     }
-    const why = { changed: 'The text on the page changed since you selected it.', gone: 'That text box is gone from the page.', not_editable: 'That text isn\'t in a box you can type in.' }[r?.reason] ?? 'p3n couldn\'t put the text back.';
+    const why = { changed: 'The text on the page changed since you selected it.', gone: 'That text box is gone from the page.', not_editable: 'That text isn\'t in a box you can type in.', replaced: 'p3n already replaced that selection.' }[r?.reason] ?? 'p3n couldn\'t put the text back.';
     say(`${why} Copy the rewrite and paste it instead.`, 'warn');
   } catch {
     say('The page was reloaded or changed, so p3n can\'t edit it any more. Copy the rewrite and paste it instead.', 'warn');
