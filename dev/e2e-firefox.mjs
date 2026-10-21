@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdir, mkdtemp, readFile, writeFile, appendFile } from 'node:fs/promises';
-import { HEADLINES, SHORT, mock, scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
+import { GUARDS, HEADLINES, SHORT, mock, oddAnswers, scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(import.meta.dirname, 'out');
@@ -142,6 +142,35 @@ try {
       ok(`headline: "${want}" for ai_before ${scores.ai_before}, passes ${scores.passes}`, label === want, label);
     }
     mock.humanizeScores = null;
+  }
+
+  // Replace refuses when the page text changed after the selection was taken. Canned answers only.
+  if (MOCK && (!only || only.includes('guard'))) {
+    for (const [url, select, edit] of GUARDS) {
+      const tab = await browser.newPage();
+      tab.on('pageerror', (e) => errors.push(`guard: ${e.message}`));
+      await tab.goto(base + url);
+      const text = await tab.evaluate(select);
+      const { tabId, windowId } = await panel.evaluate(async (u) => { const t = (await browser.tabs.query({})).find((x) => x.url === u); return { tabId: t.id, windowId: t.windowId }; }, base + url);
+      await activate(panelTab);
+      await panel.evaluate(() => document.querySelector('#result').replaceChildren());
+      await panel.evaluate((info, t) => browser.runtime.sendMessage({ p3nTest: 'startJob', args: ['humanize', info, t] }), { selectionText: text, frameId: 0 }, { id: tabId, windowId });
+      await panel.waitForFunction(() => [...document.querySelectorAll('#result button')].some((b) => b.textContent.startsWith('Replace')) && document.querySelector('#busy').hidden, { timeout: 15000, polling: 100 });
+      const edited = await tab.evaluate(edit);
+      await activate(tabId);
+      await panel.evaluate(() => [...document.querySelectorAll('#result button')].find((b) => b.textContent.startsWith('Replace')).click());
+      await panel.waitForFunction(() => !document.querySelector('#result .note.small')?.hidden, { timeout: 10000, polling: 100 }).catch(() => {});
+      const after = await tab.evaluate(() => { const b = document.querySelector('#box'); return b.value ?? b.innerText; });
+      const status = await panel.evaluate(() => document.querySelector('#result .note.small')?.textContent ?? '');
+      ok(`guard ${url}: Replace refused after the page changed, page kept`, after === edited && /changed/.test(status), status);
+      await tab.close();
+    }
+  }
+
+  // Errors and answers missing their fields. Canned answers only.
+  if (MOCK && (!only || only.includes('odd'))) {
+    await activate(panelTab);
+    await oddAnswers(panel, ok);
   }
 
   // Too long without a key: refused before any call.

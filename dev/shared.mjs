@@ -16,11 +16,34 @@ export const FIXTURES = {
   me: { error: { type: 'unauthorized', message: 'Invalid API key.' } },
 };
 
-// Scores laid over the humanize fixture while set, for the headline cases below.
-export const mock = { humanizeScores: null };
+// Scores laid over the humanize fixture while set, for the headline cases below. `next` replaces the next
+// skill answer (the odd cases below), and `calls` counts the skill calls the stand-in API answered.
+export const mock = { humanizeScores: null, next: null, calls: 0 };
 export const answer = (skill) => (skill === 'humanize' && mock.humanizeScores
   ? { ...FIXTURES.humanize, output: { ...FIXTURES.humanize.output, ...mock.humanizeScores } }
   : FIXTURES[skill]);
+
+// The stand-in API's answer to a skill call: { status, type, body }.
+export function reply(skill) {
+  mock.calls++;
+  const n = mock.next;
+  mock.next = null;
+  if (n?.html) return { status: n.status, type: 'text/html', body: n.html };
+  return { status: n?.status ?? 200, type: 'application/json', body: JSON.stringify(n ? n.body : answer(skill)) };
+}
+
+// Errors and answers missing their fields: the panel explains each one, with no script error.
+export const ODD = [
+  { name: 'free limit: own copy, Sign up only to p3n.si', skill: 'detect', want: /used up; more in about 10 min/, href: 'https://p3n.si/register',
+    next: { status: 429, body: { error: { type: 'free_limit', message: 'Free calls are used up.', signup_url: 'javascript:alert(1)', retry_after_seconds: 600 } } } },
+  { name: "504 too_long: the API's message", skill: 'humanize', want: /send a shorter text/,
+    next: { status: 504, body: { error: { type: 'too_long', message: 'The text took longer than 85 s to process; send a shorter text. Not charged.' } } } },
+  { name: 'HTML error page', skill: 'detect', want: /p3n answered 502/, next: { status: 502, html: '<!doctype html><title>502</title>Bad gateway' } },
+  { name: 'failed run: its error', skill: 'humanize', want: /provider failed/,
+    next: { status: 200, body: { ...FIXTURES.humanize, status: 'failed', output: null, error: 'The model provider failed. You were not charged.' } } },
+  { name: 'detect without a score', skill: 'detect', want: /without a result/, next: { status: 200, body: { ...FIXTURES.detect, output: { version: 'detect-v9' } } } },
+  { name: 'humanize without a rewrite', skill: 'humanize', want: /without a result/, next: { status: 200, body: { ...FIXTURES.humanize, output: { version: 'humanize-v9', ai_after: 0.1 } } } },
+];
 
 // The rewrite headline says "No longer" or "Still" only when the detector model put the text sent in the AI
 // class (ai_before >= 0.5). It can score text at 0% that Check called likely AI.
@@ -47,7 +70,10 @@ export async function startServer({ api = false } = {}) {
   const server = http.createServer((req, res) => {
     const skill = api && req.method === 'POST' && req.url.match(/^\/v1\/(detect|humanize)$/)?.[1];
     if (api && req.method === 'OPTIONS') return res.writeHead(204, cors).end();
-    if (skill) return res.writeHead(200, { ...cors, 'Content-Type': 'application/json', 'X-Free-Remaining': '9' }).end(JSON.stringify(answer(skill)));
+    if (skill) {
+      const a = reply(skill);
+      return res.writeHead(a.status, { ...cors, 'Content-Type': a.type, 'X-Free-Remaining': '9' }).end(a.body);
+    }
     if (api && req.url === '/v1/me') return res.writeHead(401, { ...cors, 'Content-Type': 'application/json' }).end(JSON.stringify(FIXTURES.me));
     res.writeHead(PAGES[req.url] ? 200 : 404, { 'Content-Type': 'text/html' }).end(PAGES[req.url] ?? 'not found');
   });
@@ -64,3 +90,32 @@ export const scoreSettled = () => {
   const sr = document.querySelector('.score .sr');
   return !!n && n.textContent === sr.textContent && !document.querySelector('.meter i')?.style.transform;
 };
+
+// Page edits made after the selection was taken: Replace must refuse and leave the page as it is.
+// [page, select, edit (returns the page's text after the edit)]
+export const GUARDS = [
+  ['/textarea', selectField, () => { const b = document.querySelector('#box'); b.value = `Edited. ${b.value}`; return b.value; }],
+  ['/rich', selectNode('#box div:nth-child(2)'), () => { document.querySelector('#box div:nth-child(2)').firstChild.insertData(0, 'Edited. '); return document.querySelector('#box').innerText; }],
+];
+
+// Runs the ODD cases and a too-short Check in an open panel page.
+export async function oddAnswers(panel, ok) {
+  for (const c of ODD) {
+    mock.next = c.next;
+    await panel.evaluate((t, btn) => {
+      document.querySelector('#result').replaceChildren();
+      const el = document.querySelector('#text'); el.value = t; el.dispatchEvent(new Event('input')); document.querySelector(btn).click();
+    }, AI_TEXT, c.skill === 'detect' ? '#check' : '#rewrite');
+    await panel.waitForFunction(() => document.querySelector('#result')?.textContent.trim() && document.querySelector('#busy').hidden, { timeout: 15000, polling: 100 });
+    const got = await panel.evaluate(() => ({ text: document.querySelector('#result').innerText, error: !!document.querySelector('#result .note.error'), href: document.querySelector('#result a.btn')?.href ?? null }));
+    ok(`odd answer, ${c.name}`, got.error && c.want.test(got.text) && (!c.href || got.href === c.href), got.text.replace(/\s+/g, ' ').slice(0, 100));
+  }
+  mock.next = null;
+  const calls = mock.calls;
+  await panel.evaluate(() => {
+    document.querySelector('#result').replaceChildren();
+    const el = document.querySelector('#text'); el.value = 'Too short to check.'; el.dispatchEvent(new Event('input')); document.querySelector('#check').click();
+  });
+  const msg = await panel.$eval('#result', (r) => r.innerText);
+  ok('Check under 40 characters: explained, no call', /at least 40/.test(msg) && mock.calls === calls, msg.slice(0, 100));
+}

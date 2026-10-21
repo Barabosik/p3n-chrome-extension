@@ -3,7 +3,7 @@
 // A script can't click Chrome's own right-click menu, so it loads a dev copy of the extension that
 // also has host access to the local test server, and starts the same startJob the menu does, by message.
 import puppeteer from 'puppeteer-core';
-import { FIXTURES, HEADLINES, SHORT, answer, mock, scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
+import { FIXTURES, GUARDS, HEADLINES, SHORT, mock, oddAnswers, reply, scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -57,17 +57,21 @@ try {
     p.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
     p.on('console', (m) => {
       const loc = m.location()?.url ?? '';
-      // Expected: the test server has no favicon, and the options check sends a fake key on purpose (401).
-      if (m.type() !== 'error' || loc.endsWith('/favicon.ico') || (name === 'options' && /401/.test(m.text()))) return;
+      // Expected: the test server has no favicon, the options check sends a fake key on purpose (401), and the
+      // odd answers are error statuses on purpose.
+      if (m.type() !== 'error' || loc.endsWith('/favicon.ico') || (name === 'options' && /401/.test(m.text()))
+        || (name === 'odd panel' && /Failed to load resource/.test(m.text()))) return;
       errors.push(`${name}: ${m.text()} ${loc}`);
     });
   };
 
-  const mockApi = async (p, skill) => {
+  const mockApi = async (p) => {
     await p.setRequestInterception(true);
-    p.on('request', (r) => (r.url().startsWith('https://api.p3n.si/v1/')
-      ? r.respond({ status: 200, contentType: 'application/json', headers: { 'X-Free-Remaining': '9' }, body: JSON.stringify(answer(skill)) })
-      : r.continue()));
+    p.on('request', (r) => {
+      if (!r.url().startsWith('https://api.p3n.si/')) return r.continue();
+      const a = reply(r.url().match(/\/v1\/(detect|humanize)$/)?.[1] ?? 'detect');
+      r.respond({ status: a.status, contentType: a.type, headers: { 'X-Free-Remaining': '9' }, body: a.body });
+    });
   };
 
   // A tab behind the panel paints no frames in headless Chrome, so its screenshot can wait forever.
@@ -84,7 +88,7 @@ try {
     watch(panel, `${name} panel`);
     await panel.setViewport({ width: 380, height: 900 });
     if (calm) await panel.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
-    if (MOCK) await mockApi(panel, skill);
+    if (MOCK) await mockApi(panel);
     await panel.goto(`chrome-extension://${id}/ui/panel.html`);
     const windowId = await panel.evaluate(async () => (await chrome.windows.getCurrent()).id);
     const tabId = await panel.evaluate(async (u) => (await chrome.tabs.query({ url: u }))[0]?.id, base + url);
@@ -167,7 +171,7 @@ try {
     const panel = await browser.newPage();
     watch(panel, 'headline panel');
     await panel.setViewport({ width: 380, height: 900 });
-    await mockApi(panel, 'humanize');
+    await mockApi(panel);
     await panel.goto(`chrome-extension://${id}/ui/panel.html`);
     for (const [i, [scores, want]] of HEADLINES.entries()) {
       mock.humanizeScores = scores;
@@ -180,6 +184,43 @@ try {
       ok(`headline: "${want}" for ai_before ${scores.ai_before}, passes ${scores.passes}`, label === want, label);
     }
     mock.humanizeScores = null;
+    await panel.close();
+  }
+
+  // Replace refuses when the page text changed after the selection was taken. Canned answers only.
+  if (MOCK && (!only || only.includes('guard'))) {
+    for (const [url, select, edit] of GUARDS) {
+      const tab = await browser.newPage();
+      watch(tab, 'guard');
+      await tab.goto(base + url);
+      const text = await tab.evaluate(select);
+      const panel = await browser.newPage();
+      watch(panel, 'guard panel');
+      await mockApi(panel);
+      await panel.goto(`chrome-extension://${id}/ui/panel.html`);
+      const windowId = await panel.evaluate(async () => (await chrome.windows.getCurrent()).id);
+      const tabId = await panel.evaluate(async (u) => (await chrome.tabs.query({ url: u }))[0]?.id, base + url);
+      await panel.evaluate((info, t) => chrome.runtime.sendMessage({ p3nTest: 'startJob', args: ['humanize', info, t] }), { selectionText: text, frameId: 0 }, { id: tabId, windowId });
+      await panel.waitForFunction(() => [...document.querySelectorAll('#result button')].some((b) => b.textContent.startsWith('Replace')) && document.querySelector('#busy').hidden, { timeout: 15000, polling: 100 });
+      const edited = await tab.evaluate(edit);
+      await panel.evaluate(() => [...document.querySelectorAll('#result button')].find((b) => b.textContent.startsWith('Replace')).click());
+      await panel.waitForFunction(() => !document.querySelector('#result .note.small')?.hidden, { timeout: 10000, polling: 100 }).catch(() => {});
+      const after = await tab.evaluate(() => { const b = document.querySelector('#box'); return b.value ?? b.innerText; });
+      const status = await panel.evaluate(() => document.querySelector('#result .note.small')?.textContent ?? '');
+      ok(`guard ${url}: Replace refused after the page changed, page kept`, after === edited && /changed/.test(status), status);
+      await panel.close();
+      await tab.close();
+    }
+  }
+
+  // Errors and answers missing their fields. Canned answers only.
+  if (MOCK && (!only || only.includes('odd'))) {
+    const panel = await browser.newPage();
+    watch(panel, 'odd panel');
+    await panel.setViewport({ width: 380, height: 900 });
+    await mockApi(panel);
+    await panel.goto(`chrome-extension://${id}/ui/panel.html`);
+    await oddAnswers(panel, ok);
     await panel.close();
   }
 
