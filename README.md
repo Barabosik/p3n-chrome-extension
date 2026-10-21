@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Chrome Web Store (in review) · Firefox Add-ons (in review) · <a href="https://p3n.si">p3n.si</a>
+  <a href="https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh">Chrome Web Store</a> (in review) · <a href="https://addons.mozilla.org/firefox/addon/p3n/">Firefox Add-ons</a> (in review) · <a href="https://p3n.si">p3n.si</a>
 </p>
 
 <p align="center">
@@ -48,9 +48,16 @@ p3n sends the text you selected, only when you click, and only to `api.p3n.si`. 
 
 </details>
 
-## Install from source
+## Install from the store
 
-Until the store listings are live:
+Both listings are in review, so these links don't work yet.
+
+- Chrome, Edge or Brave: [Chrome Web Store](https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh)
+- Firefox 140 or later: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/p3n/)
+
+Store installs update themselves.
+
+## Install from source
 
 1. Download this repo (Code, then Download ZIP) and unzip it.
 2. Chrome, Edge or Brave: open `chrome://extensions`, turn on Developer mode, click **Load unpacked** and pick the folder.
