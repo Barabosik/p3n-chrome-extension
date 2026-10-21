@@ -24,6 +24,7 @@ npm run lint:firefox
 The tests load the extension into a headless Chrome or Firefox, open local test pages (an article, a textarea, a webmail-style editor) and run Check and Rewrite, including Replace and undo. `MOCK=1` answers with canned API results. Without it the tests call the live API and use 3 or 4 of the free hourly calls.
 
 - `ONLY=article,textarea,email,headline,guard,odd` runs some of the scenarios. These run only with `MOCK=1`: `headline` checks the rewrite's headline for each kind of score, `guard` that Replace refuses once the page text has changed, and `odd` the error answers (free limit, too long, an HTML error page, a failed run, an answer without its result) and a Check under 40 characters.
+- Light and dark: the pages follow the browser's setting, and the tests set it either way. In Chrome the mocked `lines` and `article-dark` run in dark, and the options page is checked in both; Firefox checks dark in a second browser (`dark`).
 - `CHROME=` and `FIREFOX=` point at another browser binary. Edge and Brave work as `CHROME=`.
 - `FRAMES=1` saves frames of each result as it animates in.
 

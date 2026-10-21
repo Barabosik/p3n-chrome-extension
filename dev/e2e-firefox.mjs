@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdir, mkdtemp, readFile, writeFile, appendFile } from 'node:fs/promises';
-import { GUARDS, HEADLINES, SHORT, mock, oddAnswers, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
+import { GUARDS, HEADLINES, SHORT, darkApplied, mock, oddAnswers, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(import.meta.dirname, 'out');
@@ -38,7 +38,8 @@ browser.runtime.onInstalled.addListener(() => browser.tabs.create({ url: browser
 
 // ---- browser ---------------------------------------------------------------------------------
 await mkdir(OUT, { recursive: true });
-const browser = await puppeteer.launch({ browser: 'firefox', executablePath: FIREFOX, headless: true, args: ['-remote-allow-system-access', '--width=1100', '--height=900'] });
+// Pages prefer light here whatever the machine's theme, and dark in the second Firefox at the end.
+const browser = await puppeteer.launch({ browser: 'firefox', executablePath: FIREFOX, headless: true, args: ['-remote-allow-system-access', '--width=1100', '--height=900'], extraPrefsFirefox: { 'layout.css.prefers-color-scheme.content-override': 1 } });
 const errors = [];
 try {
   ok('add-on installs', (await browser.installExtension(ext)) === manifest.browser_specific_settings.gecko.id, `Firefox ${(await browser.version()).split('/')[1]}`);
@@ -50,6 +51,8 @@ try {
     for (const p of await browser.pages()) if (await p.evaluate(() => location.protocol).catch(() => '') === 'moz-extension:') panel = p;
   }
   ok('panel page opens', !!panel);
+  await panel.waitForFunction(() => document.querySelector('.brand img')?.complete, { polling: 100, timeout: 10000 });
+  ok('light theme follows the browser', !(await panel.evaluate(darkApplied)));
   panel.on('console', (m) => { if (m.type() === 'error') errors.push(`panel: ${m.text()}`); });
   panel.on('pageerror', (e) => errors.push(`panel: ${e.message}`));
   await panel.waitForFunction(() => document.querySelector('#quota')?.textContent, { polling: 100, timeout: 10000 });
@@ -202,6 +205,27 @@ try {
   await Promise.race([browser.close(), wait(5000)]);
   server.close();
 }
+// Dark follows the browser: a second Firefox whose pages prefer dark (its automation can't emulate the media
+// feature on an extension page), with the panel the add-on opens on install.
+if (!process.env.ONLY || process.env.ONLY.split(',').includes('dark')) {
+  const dark = await puppeteer.launch({ browser: 'firefox', executablePath: FIREFOX, headless: true, args: ['-remote-allow-system-access'], extraPrefsFirefox: { 'layout.css.prefers-color-scheme.content-override': 0 } });
+  try {
+    await dark.installExtension(ext);
+    let page;
+    for (let i = 0; i < 40 && !page; i++) {
+      await wait(250);
+      for (const p of await dark.pages()) if (await p.evaluate(() => location.protocol).catch(() => '') === 'moz-extension:') page = p;
+    }
+    await page?.waitForFunction(() => document.querySelector('.brand img')?.complete, { polling: 100, timeout: 10000 });
+    ok('dark theme follows the browser', !!page && await page.evaluate(darkApplied));
+  } catch (e) {
+    ok('dark theme follows the browser', false, e.message.split('
+')[0]);
+  } finally {
+    await Promise.race([dark.close(), wait(5000)]);
+  }
+}
+
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} passed (Firefox${MOCK ? ', mocked API' : ''}).`);
 process.exit(failed.length ? 1 : 0);

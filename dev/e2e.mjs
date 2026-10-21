@@ -3,7 +3,7 @@
 // A script can't click Chrome's own right-click menu, so it loads a dev copy of the extension that
 // also has host access to the local test server, and starts the same startJob the menu does, by message.
 import puppeteer from 'puppeteer-core';
-import { FIXTURES, GUARDS, HEADLINES, SHORT, mock, oddAnswers, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
+import { FIXTURES, GUARDS, HEADLINES, SHORT, darkApplied, mock, oddAnswers, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -78,7 +78,7 @@ try {
   // A tab behind the panel paints no frames in headless Chrome, so its screenshot can wait forever.
   const shot = async (p, file) => { await p.bringToFront(); await p.screenshot({ path: path.join(OUT, file) }); };
 
-  async function scenario({ name, url, skill, select, expectReplace, calm }) {
+  async function scenario({ name, url, skill, select, expectReplace, calm, dark }) {
     const tab = await browser.newPage();
     watch(tab, name);
     await tab.setViewport({ width: 900, height: 800 });
@@ -88,7 +88,8 @@ try {
     const panel = await browser.newPage();
     watch(panel, `${name} panel`);
     await panel.setViewport({ width: 380, height: 900 });
-    if (calm) await panel.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
+    // The theme is set either way, so the captures don't follow the machine's own (the store screenshots are light).
+    await panel.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: dark ? 'dark' : 'light' }, ...(calm ? [{ name: 'prefers-reduced-motion', value: 'reduce' }] : [])]);
     if (MOCK) await mockApi(panel);
     await panel.goto(`chrome-extension://${id}/ui/panel.html`);
     const windowId = await panel.evaluate(async () => (await chrome.windows.getCurrent()).id);
@@ -109,6 +110,7 @@ try {
     ok(`${name}: selection reaches the panel`, res.text.replace(/\s+/g, ' ').trim() === text.replace(/\s+/g, ' ').trim());
     ok(`${name}: ${skill} result shows`, !res.isError && res.result.length > 40, res.isError ? res.result.slice(0, 160) : `${secs} s, ${res.quota}`);
     if (calm && !res.isError) ok(`${name}: reduced motion shows the final score at once`, await panel.evaluate(scoreSettled));
+    ok(`${name}: ${dark ? 'dark' : 'light'} theme follows the browser`, await panel.evaluate(darkApplied) === !!dark);
     // FRAMES=1 keeps a few frames of the result arriving, to look at the motion.
     if (process.env.FRAMES) {
       for (const [i, ms] of [0, 120, 250, 400, 600, 900].entries()) {
@@ -165,8 +167,11 @@ try {
     { name: 'article', url: '/static', skill: 'detect', select: selectNode('#box') },
     { name: 'textarea', url: '/textarea', skill: 'humanize', select: selectField, expectReplace: true },
     { name: 'email', url: '/rich', skill: 'humanize', select: selectNode('#box div:nth-child(2)'), expectReplace: true, calm: true },
-    // Canned answers only, so not in a live run.
-    ...(MOCK ? [{ name: 'lines', url: '/lines', skill: 'humanize', select: selectFromLineBreak, expectReplace: true }] : []),
+    // Canned answers only, so not in a live run. These two in dark (the store screenshots come from the light ones).
+    ...(MOCK ? [
+      { name: 'lines', url: '/lines', skill: 'humanize', select: selectFromLineBreak, expectReplace: true, dark: true },
+      { name: 'article-dark', url: '/static', skill: 'detect', select: selectNode('#box'), dark: true },
+    ] : []),
   ];
   for (const s of scenarios) if (!only || only.includes(s.name)) await scenario(s);
 
@@ -239,6 +244,7 @@ try {
   const opts = await browser.newPage();
   watch(opts, 'options');
   await opts.setViewport({ width: 760, height: 640 });
+  await opts.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
   if (MOCK) { // the key check too, so a mocked run makes no live call
     await opts.setRequestInterception(true);
     opts.on('request', (r) => (r.url().startsWith('https://api.p3n.si/v1/')
@@ -252,7 +258,13 @@ try {
   // Read from the page, not the service worker: Chrome may have put the worker to sleep by now.
   const stored = await opts.evaluate(async () => (await chrome.storage.local.get('apiKey')).apiKey ?? null);
   ok('options: a wrong key is refused and not saved', /doesn't accept/.test(optMsg) && stored === null, optMsg);
-  await opts.screenshot({ path: path.join(OUT, 'options.png') });
+  const darkWhenLight = await opts.evaluate(darkApplied);
+  await shot(opts, 'options.png');
+  await opts.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
+  // A live switch: the logo's other source loads after the switch.
+  const darkAfter = await opts.waitForFunction(darkApplied, { timeout: 5000, polling: 100 }).then(() => true, () => false);
+  ok('options: light and dark themes follow the browser', !darkWhenLight && darkAfter);
+  await shot(opts, 'options-dark.png');
 
   ok('no console errors', errors.length === 0, errors.slice(0, 5).join(' || '));
 } finally {

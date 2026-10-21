@@ -4,7 +4,7 @@ main { flex: 1; padding: 0 16px 16px; display: flex; flex-direction: column; gap
 header.bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 12px; }
 .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; }
 .wordmark { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
-.wordmark span { color: var(--accent); }
+.wordmark span { color: var(--accent-text); }
 
 .input { display: flex; flex-direction: column; gap: 8px; }
 
@@ -50,7 +50,7 @@ textarea.arrived { animation: arrive 900ms var(--ease-out); }
 .meter i { display: block; height: 100%; transform-origin: left; transition: background-color var(--t-hover) ease; }
 .score .pct { transition: color var(--t-hover) ease; }
 
-.t-ai { color: var(--accent); } .b-ai { background: var(--accent); }
+.t-ai { color: var(--accent-text); } .b-ai { background: var(--accent); }
 .t-mid { color: var(--amber); } .b-mid { background: var(--amber-bar); }
 .t-human { color: var(--green); } .b-human { background: var(--green-bar); }
 

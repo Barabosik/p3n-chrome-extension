@@ -2,7 +2,8 @@
 # The logo's pen body is transparent with a black outline, which vanishes on a dark toolbar. So the browser icons
 # (16-128) sit on a light rounded tile that reads on light and dark toolbars. At 16 and 32 px only the pen is drawn
 # (the swooshes below it turn to noise that small). icons/logo.png is the plain logo for the panel and options
-# headers, which sit on p3n's light paper anyway.
+# headers on light paper; icons/logo-dark.png, from dev/logo-512-dark.png (p3n.si's dark logo: the black line art in
+# the dark theme's ink), is the same on dark paper.
 import sys
 from pathlib import Path
 from PIL import Image, ImageDraw
@@ -37,4 +38,6 @@ out_dir = ROOT / ("dev/out/icons" if "preview" in sys.argv else "icons")
 for size, art, pad in ((16, pen, 0.08), (32, pen, 0.1), (48, logo, 0.1), (128, logo, 0.12)):
     tile(art, size, pad).save(out_dir / f"{size}.png", optimize=True)
 logo.resize((128, 128), Image.LANCZOS).save(out_dir / "logo.png", optimize=True)
+dark = Image.open(ROOT / "dev" / "logo-512-dark.png").convert("RGBA")
+square(dark).resize((128, 128), Image.LANCZOS).save(out_dir / "logo-dark.png", optimize=True)
 print("icons written to", out_dir.relative_to(ROOT))
