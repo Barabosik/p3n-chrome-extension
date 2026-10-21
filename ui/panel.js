@@ -267,8 +267,10 @@ function renderDetect(o) {
 
 function renderHumanize(o, sent) {
   const t = tone(o.ai_after);
-  // The rewrite ends with a line break; keep only the trailing whitespace the selection itself had.
-  const rewrite = o.text.trimEnd() + (state.source?.text?.match(/\s*$/)?.[0] ?? '');
+  // The rewrite ends with a line break; keep only the whitespace the selection itself had at each end, so
+  // Replace doesn't join it to the line or word before or after.
+  const src = state.source?.text ?? '';
+  const rewrite = src.match(/^\s*/)[0] + o.text.trim() + src.match(/\s*$/)[0];
   // Only offer Replace when what was rewritten is still the page's selection, not text edited in the panel.
   const replaceable = state.source?.editable && state.source.tabId != null && state.source.text.trim() === sent;
   const status = h('p', { class: 'small', hidden: true });
