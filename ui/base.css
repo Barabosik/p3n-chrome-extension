@@ -111,15 +111,16 @@ p { margin: 0; }
   color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px;
   transition: color var(--t-hover) ease;
 }
-/* An icon button: the panel's light/dark switch. */
-.icon-btn {
-  display: inline-flex; align-items: center; justify-content: center; flex: none;
-  width: 32px; height: 32px; border: 0; border-radius: var(--radius); padding: 0;
-  background: none; color: var(--muted); cursor: pointer;
+/* System, Light or Dark as three icons, as in p3n.si's footer (the panel's foot). */
+.pill { display: inline-flex; flex: none; gap: 2px; padding: 2px; border: 1px solid var(--rule); border-radius: 999px; }
+.pill button {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: 999px; background: none; color: var(--muted); cursor: pointer;
   transition: background-color var(--t-hover) ease, color var(--t-hover) ease;
 }
-.icon-btn svg { width: 18px; height: 18px; }
-@media (hover: hover) { .icon-btn:hover { background: var(--tint); color: var(--ink); } }
+.pill svg { width: 14px; height: 14px; }
+.pill button[aria-checked="true"] { background: var(--tint); color: var(--ink); }
+@media (hover: hover) { .pill button:hover { color: var(--ink); } }
 
 /* System, Light or Dark, one chosen (the settings page). */
 .choice { display: inline-flex; align-self: flex-start; gap: 4px; padding: 4px; border-radius: 10px; background: var(--tint); }

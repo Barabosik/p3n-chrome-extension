@@ -198,12 +198,13 @@ try {
   const stored = await opts.evaluate(async () => (await browser.storage.local.get('apiKey')).apiKey ?? null);
   ok('options: a wrong key is refused and not saved', /doesn't accept/.test(optMsg) && stored === null, optMsg);
 
-  // The switch: the panel's header button turns it dark and saves it, the settings page follows, and System there
-  // follows the browser again.
+  // System, Light or Dark: Dark at the panel's foot turns it dark and keeps it, the settings page follows, and System
+  // there follows the browser again.
   const theme = (p) => p.evaluate(async () => ({ stored: (await browser.storage.local.get('theme')).theme ?? 'system', checked: document.querySelector('[data-theme-set][aria-checked="true"]')?.dataset.themeSet }));
   const turns = (p, dark) => p.waitForFunction(dark ? darkApplied : lightApplied, { timeout: 5000, polling: 100 }).then(() => true, () => false);
-  await panel.evaluate(() => document.querySelector('header [data-theme-toggle]').click());
-  ok("switch: the panel's button turns it dark and saves it", await turns(panel, true) && (await theme(panel)).stored === 'dark');
+  ok('switch: System, Light and Dark at the panel\'s foot, nothing in the header', await panel.evaluate(() => document.querySelectorAll('footer [data-theme-set]').length === 3 && !document.querySelector('header [data-theme-set], header [data-theme-toggle]')));
+  await panel.evaluate(() => document.querySelector('footer [data-theme-set="dark"]').click());
+  ok("switch: Dark at the panel's foot turns it dark and keeps it", await turns(panel, true) && (await theme(panel)).stored === 'dark');
   ok('switch: the settings page follows', await turns(opts, true) && (await theme(opts)).checked === 'dark');
   await opts.evaluate(() => document.querySelector('[data-theme-set="system"]').click());
   ok('switch: System follows the browser again', await turns(panel, false) && (await theme(panel)).stored === 'system');
