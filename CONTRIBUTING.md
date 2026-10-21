@@ -23,7 +23,7 @@ npm run lint:firefox
 
 The tests load the extension into a headless Chrome or Firefox, open local test pages (an article, a textarea, a webmail-style editor) and run Check and Rewrite, including Replace and undo. `MOCK=1` answers with canned API results. Without it the tests call the live API and use 3 or 4 of the free hourly calls.
 
-- `ONLY=article,textarea,email` runs some of the scenarios.
+- `ONLY=article,textarea,email,headline` runs some of the scenarios. `headline` checks the rewrite's headline for each kind of score, and runs only with `MOCK=1`.
 - `CHROME=` and `FIREFOX=` point at another browser binary. Edge and Brave work as `CHROME=`.
 - `FRAMES=1` saves frames of each result as it animates in.
 

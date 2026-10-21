@@ -16,6 +16,22 @@ export const FIXTURES = {
   me: { error: { type: 'unauthorized', message: 'Invalid API key.' } },
 };
 
+// Scores laid over the humanize fixture while set, for the headline cases below.
+export const mock = { humanizeScores: null };
+export const answer = (skill) => (skill === 'humanize' && mock.humanizeScores
+  ? { ...FIXTURES.humanize, output: { ...FIXTURES.humanize.output, ...mock.humanizeScores } }
+  : FIXTURES[skill]);
+
+// The rewrite headline says "No longer" or "Still" only when the detector model put the text sent in the AI
+// class (ai_before >= 0.5). It can score text at 0% that Check called likely AI.
+export const HEADLINES = [
+  [{ ai_before: 0.95, ai_after: 0.01, passes: true }, 'No longer reads as AI'],
+  [{ ai_before: 0.08, ai_after: 0.02, passes: true }, "Doesn't read as AI"],
+  [{ ai_before: 0.88, ai_after: 0.71, passes: false, label_after: 'ai' }, 'Still reads as AI'],
+  [{ ai_before: 0.3, ai_after: 0.62, passes: false, label_after: 'ai' }, 'Reads as AI'],
+  [{ ai_before: null, ai_after: 0.04, passes: true }, "Doesn't read as AI"],
+];
+
 const page = (body) => `<!doctype html><meta charset="utf-8"><title>p3n test</title>
 <style>body{font:16px/1.6 system-ui;max-width:640px;margin:40px auto;padding:0 20px;color:#222}textarea,[contenteditable]{width:100%;min-height:140px;font:inherit;padding:10px;border:1px solid #bbb;border-radius:6px}</style>${body}`;
 export const PAGES = {
@@ -31,7 +47,7 @@ export async function startServer({ api = false } = {}) {
   const server = http.createServer((req, res) => {
     const skill = api && req.method === 'POST' && req.url.match(/^\/v1\/(detect|humanize)$/)?.[1];
     if (api && req.method === 'OPTIONS') return res.writeHead(204, cors).end();
-    if (skill) return res.writeHead(200, { ...cors, 'Content-Type': 'application/json', 'X-Free-Remaining': '9' }).end(JSON.stringify(FIXTURES[skill]));
+    if (skill) return res.writeHead(200, { ...cors, 'Content-Type': 'application/json', 'X-Free-Remaining': '9' }).end(JSON.stringify(answer(skill)));
     if (api && req.url === '/v1/me') return res.writeHead(401, { ...cors, 'Content-Type': 'application/json' }).end(JSON.stringify(FIXTURES.me));
     res.writeHead(PAGES[req.url] ? 200 : 404, { 'Content-Type': 'text/html' }).end(PAGES[req.url] ?? 'not found');
   });

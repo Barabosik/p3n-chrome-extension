@@ -3,7 +3,7 @@
 // A script can't click Chrome's own right-click menu, so it loads a dev copy of the extension that
 // also has host access to the local test server, and starts the same startJob the menu does, by message.
 import puppeteer from 'puppeteer-core';
-import { FIXTURES, scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
+import { FIXTURES, HEADLINES, SHORT, answer, mock, scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -63,6 +63,13 @@ try {
     });
   };
 
+  const mockApi = async (p, skill) => {
+    await p.setRequestInterception(true);
+    p.on('request', (r) => (r.url().startsWith('https://api.p3n.si/v1/')
+      ? r.respond({ status: 200, contentType: 'application/json', headers: { 'X-Free-Remaining': '9' }, body: JSON.stringify(answer(skill)) })
+      : r.continue()));
+  };
+
   // A tab behind the panel paints no frames in headless Chrome, so its screenshot can wait forever.
   const shot = async (p, file) => { await p.bringToFront(); await p.screenshot({ path: path.join(OUT, file) }); };
 
@@ -77,12 +84,7 @@ try {
     watch(panel, `${name} panel`);
     await panel.setViewport({ width: 380, height: 900 });
     if (calm) await panel.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
-    if (MOCK) {
-      await panel.setRequestInterception(true);
-      panel.on('request', (r) => (r.url().startsWith('https://api.p3n.si/v1/')
-        ? r.respond({ status: 200, contentType: 'application/json', headers: { 'X-Free-Remaining': '9' }, body: JSON.stringify(FIXTURES[skill]) })
-        : r.continue()));
-    }
+    if (MOCK) await mockApi(panel, skill);
     await panel.goto(`chrome-extension://${id}/ui/panel.html`);
     const windowId = await panel.evaluate(async () => (await chrome.windows.getCurrent()).id);
     const tabId = await panel.evaluate(async (u) => (await chrome.tabs.query({ url: u }))[0]?.id, base + url);
@@ -159,6 +161,27 @@ try {
     { name: 'email', url: '/rich', skill: 'humanize', select: selectNode('#box div:nth-child(2)'), expectReplace: true, calm: true },
   ];
   for (const s of scenarios) if (!only || only.includes(s.name)) await scenario(s);
+
+  // The rewrite headline for each kind of score. Canned answers only, so not in a live run.
+  if (MOCK && (!only || only.includes('headline'))) {
+    const panel = await browser.newPage();
+    watch(panel, 'headline panel');
+    await panel.setViewport({ width: 380, height: 900 });
+    await mockApi(panel, 'humanize');
+    await panel.goto(`chrome-extension://${id}/ui/panel.html`);
+    for (const [i, [scores, want]] of HEADLINES.entries()) {
+      mock.humanizeScores = scores;
+      await panel.evaluate((t) => {
+        document.querySelector('#result').replaceChildren();
+        const el = document.querySelector('#text'); el.value = t; el.dispatchEvent(new Event('input')); document.querySelector('#rewrite').click();
+      }, `${SHORT} Case ${i + 1}.`);
+      await panel.waitForFunction(() => document.querySelector('#result .score .label') && document.querySelector('#busy').hidden, { timeout: 15000, polling: 100 });
+      const label = await panel.$eval('#result .score .label', (n) => n.textContent);
+      ok(`headline: "${want}" for ai_before ${scores.ai_before}, passes ${scores.passes}`, label === want, label);
+    }
+    mock.humanizeScores = null;
+    await panel.close();
+  }
 
   // Too long without a key: refused before any call.
   const panel = await browser.newPage();

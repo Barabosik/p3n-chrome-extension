@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdir, mkdtemp, readFile, writeFile, appendFile } from 'node:fs/promises';
-import { scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
+import { HEADLINES, SHORT, mock, scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(import.meta.dirname, 'out');
@@ -128,8 +128,23 @@ try {
   ];
   for (const s of scenarios) if (!only || only.includes(s.name)) await scenario(s);
 
-  // Too long without a key: refused before any call.
+  // The rewrite headline for each kind of score. Canned answers only, so not in a live run.
   await activate(panelTab);
+  if (MOCK && (!only || only.includes('headline'))) {
+    for (const [i, [scores, want]] of HEADLINES.entries()) {
+      mock.humanizeScores = scores;
+      await panel.evaluate((t) => {
+        document.querySelector('#result').replaceChildren();
+        const el = document.querySelector('#text'); el.value = t; el.dispatchEvent(new Event('input')); document.querySelector('#rewrite').click();
+      }, `${SHORT} Case ${i + 1}.`);
+      await panel.waitForFunction(() => document.querySelector('#result .score .label') && document.querySelector('#busy').hidden, { timeout: 15000, polling: 100 });
+      const label = await panel.$eval('#result .score .label', (n) => n.textContent);
+      ok(`headline: "${want}" for ai_before ${scores.ai_before}, passes ${scores.passes}`, label === want, label);
+    }
+    mock.humanizeScores = null;
+  }
+
+  // Too long without a key: refused before any call.
   await panel.evaluate(() => { const t = document.querySelector('#text'); t.value = 'word '.repeat(1200); t.dispatchEvent(new Event('input')); document.querySelector('#check').click(); });
   const longMsg = await panel.$eval('#result', (r) => r.innerText);
   ok('over 5,000 characters without a key: explained, no call', /5,000/.test(longMsg), longMsg.slice(0, 120));
