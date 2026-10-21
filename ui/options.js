@@ -41,6 +41,9 @@ key.addEventListener('input', () => {
 });
 
 document.querySelector('#remove').addEventListener('click', async () => {
+  // A key check still waiting (debounce or network) must not save the key back after this.
+  clearTimeout(debounce);
+  pending++;
   await ext.storage.local.remove('apiKey');
   saved = '';
   key.value = '';
