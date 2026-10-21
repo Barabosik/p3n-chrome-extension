@@ -219,8 +219,7 @@ if (!process.env.ONLY || process.env.ONLY.split(',').includes('dark')) {
     await page?.waitForFunction(() => document.querySelector('.brand img')?.complete, { polling: 100, timeout: 10000 });
     ok('dark theme follows the browser', !!page && await page.evaluate(darkApplied));
   } catch (e) {
-    ok('dark theme follows the browser', false, e.message.split('
-')[0]);
+    ok('dark theme follows the browser', false, e.message.split('\n')[0]);
   } finally {
     await Promise.race([dark.close(), wait(5000)]);
   }
