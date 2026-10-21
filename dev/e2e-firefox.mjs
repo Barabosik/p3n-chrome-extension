@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdir, mkdtemp, readFile, writeFile, appendFile } from 'node:fs/promises';
-import { GUARDS, HEADLINES, SHORT, mock, oddAnswers, scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
+import { GUARDS, HEADLINES, SHORT, mock, oddAnswers, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(import.meta.dirname, 'out');
@@ -110,6 +110,7 @@ try {
           ok(`${name}: no blank line added`, !/\n\s*\n/.test(after.trim()), JSON.stringify(after));
         }
         if (url === '/textarea') ok(`${name}: field holds exactly the rewrite`, after === res.rewrite, JSON.stringify(after));
+        if (url === '/lines') ok(`${name}: the line break before the selection is kept`, after === `Intro line.\n${res.rewrite}`, JSON.stringify(after));
         // Undo is the page's own: check it brings the original back.
         await tab.keyboard.down('Control'); await tab.keyboard.press('z'); await tab.keyboard.up('Control');
         const undone = await tab.evaluate(() => { const b = document.querySelector('#box'); return b.value ?? b.innerText; });
@@ -125,6 +126,8 @@ try {
     { name: 'article', url: '/static', skill: 'detect', select: selectNode('#box') },
     { name: 'textarea', url: '/textarea', skill: 'humanize', select: selectField, expectReplace: true },
     { name: 'email', url: '/rich', skill: 'humanize', select: selectNode('#box div:nth-child(2)'), expectReplace: true },
+    // Canned answers only, so not in a live run.
+    ...(MOCK ? [{ name: 'lines', url: '/lines', skill: 'humanize', select: selectFromLineBreak, expectReplace: true }] : []),
   ];
   for (const s of scenarios) if (!only || only.includes(s.name)) await scenario(s);
 

@@ -3,7 +3,7 @@
 // A script can't click Chrome's own right-click menu, so it loads a dev copy of the extension that
 // also has host access to the local test server, and starts the same startJob the menu does, by message.
 import puppeteer from 'puppeteer-core';
-import { FIXTURES, GUARDS, HEADLINES, SHORT, mock, oddAnswers, reply, scoreSettled, selectField, selectNode, startServer } from './shared.mjs';
+import { FIXTURES, GUARDS, HEADLINES, SHORT, mock, oddAnswers, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -134,6 +134,7 @@ try {
           ok(`${name}: no blank line added`, !/\n\s*\n/.test(after.trim()), JSON.stringify(after));
         }
         if (url === '/textarea') ok(`${name}: field holds exactly the rewrite`, after === res.rewrite, JSON.stringify(after));
+        if (url === '/lines') ok(`${name}: the line break before the selection is kept`, after === `Intro line.\n${res.rewrite}`, JSON.stringify(after));
         await shot(tab, `page-${name}-after.png`);
         // Undo is the page's own: check it brings the original back.
         await tab.keyboard.down('Control'); await tab.keyboard.press('z'); await tab.keyboard.up('Control');
@@ -163,6 +164,8 @@ try {
     { name: 'article', url: '/static', skill: 'detect', select: selectNode('#box') },
     { name: 'textarea', url: '/textarea', skill: 'humanize', select: selectField, expectReplace: true },
     { name: 'email', url: '/rich', skill: 'humanize', select: selectNode('#box div:nth-child(2)'), expectReplace: true, calm: true },
+    // Canned answers only, so not in a live run.
+    ...(MOCK ? [{ name: 'lines', url: '/lines', skill: 'humanize', select: selectFromLineBreak, expectReplace: true }] : []),
   ];
   for (const s of scenarios) if (!only || only.includes(s.name)) await scenario(s);
 

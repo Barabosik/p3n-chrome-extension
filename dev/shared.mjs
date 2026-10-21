@@ -61,6 +61,7 @@ export const PAGES = {
   '/textarea': page(`<h1>Compose</h1><textarea id="box">${SHORT}</textarea>`),
   '/rich': page(`<h1>Email</h1><div id="box" contenteditable="true"><div>Hi team,</div><div>${SHORT}</div><div>Thanks</div></div>`),
   '/static': page(`<h1>Blog post</h1><article><p id="box">${AI_TEXT}</p></article>`),
+  '/lines': page(`<h1>Notes</h1><textarea id="box">Intro line.\n${SHORT}</textarea>`),
 };
 
 // Serves the test pages, and with `api: true` also a stand-in for api.p3n.si: the canned runs, and a 401
@@ -82,6 +83,8 @@ export async function startServer({ api = false } = {}) {
 }
 
 export const selectField = () => { const b = document.querySelector('#box'); b.focus(); b.setSelectionRange(0, b.value.length); return b.value; };
+// From the end of the first line, the way a drag from there selects: the selection starts with the line break.
+export const selectFromLineBreak = () => { const b = document.querySelector('#box'); b.focus(); const i = b.value.indexOf('\n'); b.setSelectionRange(i, b.value.length); return b.value.slice(i); };
 export const selectNode = (sel) => new Function(`const n = document.querySelector(${JSON.stringify(sel)}); const r = document.createRange(); r.selectNodeContents(n); const s = getSelection(); s.removeAllRanges(); s.addRange(r); n.closest('[contenteditable]')?.focus(); return s.toString();`);
 
 // The score counts to its value: true once the number on screen is the stated one and the bar is at rest.
