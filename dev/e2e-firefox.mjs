@@ -209,8 +209,9 @@ try {
 // Dark follows the browser: a second Firefox whose pages prefer dark (its automation can't emulate the media
 // feature on an extension page), with the panel the add-on opens on install.
 if (!process.env.ONLY || process.env.ONLY.split(',').includes('dark')) {
-  const dark = await puppeteer.launch({ browser: 'firefox', executablePath: FIREFOX, headless: true, args: ['-remote-allow-system-access'], extraPrefsFirefox: { 'layout.css.prefers-color-scheme.content-override': 0 } });
+  let dark;
   try {
+    dark = await puppeteer.launch({ browser: 'firefox', executablePath: FIREFOX, headless: true, args: ['-remote-allow-system-access'], extraPrefsFirefox: { 'layout.css.prefers-color-scheme.content-override': 0 } });
     await dark.installExtension(ext);
     let page;
     for (let i = 0; i < 40 && !page; i++) {
@@ -222,7 +223,7 @@ if (!process.env.ONLY || process.env.ONLY.split(',').includes('dark')) {
   } catch (e) {
     ok('dark theme follows the browser', false, e.message.split('\n')[0]);
   } finally {
-    await Promise.race([dark.close(), wait(5000)]);
+    if (dark) await Promise.race([dark.close(), wait(5000)]);
   }
 }
 
