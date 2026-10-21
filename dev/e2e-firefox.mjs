@@ -198,6 +198,7 @@ try {
   const stored = await opts.evaluate(async () => (await browser.storage.local.get('apiKey')).apiKey ?? null);
   ok('options: a wrong key is refused and not saved', /doesn't accept/.test(optMsg) && stored === null, optMsg);
 
+  if (MOCK) ok('every API call names the client (X-P3N-Client)', [...mock.clients].join() === `p3n-firefox/${manifest.version}`, [...mock.clients].join(', '));
   ok('no script errors', errors.length === 0, errors.slice(0, 5).join(' || '));
 } catch (e) {
   ok('run finished', false, e.message.split('\n')[0]);

@@ -69,6 +69,7 @@ try {
     await p.setRequestInterception(true);
     p.on('request', (r) => {
       if (!r.url().startsWith('https://api.p3n.si/')) return r.continue();
+      mock.clients.add(r.headers()['x-p3n-client'] ?? null);
       const a = reply(r.url().match(/\/v1\/(?:runs\/mock-)?(detect|humanize)$/)?.[1] ?? 'detect');
       if (a.drop) return r.abort('failed');
       r.respond({ status: a.status, contentType: a.type, headers: { 'X-Free-Remaining': '9' }, body: a.body });
@@ -247,9 +248,11 @@ try {
   await opts.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
   if (MOCK) { // the key check too, so a mocked run makes no live call
     await opts.setRequestInterception(true);
-    opts.on('request', (r) => (r.url().startsWith('https://api.p3n.si/v1/')
-      ? r.respond({ status: 401, contentType: 'application/json', body: JSON.stringify(FIXTURES.me) })
-      : r.continue()));
+    opts.on('request', (r) => {
+      if (!r.url().startsWith('https://api.p3n.si/v1/')) return r.continue();
+      mock.clients.add(r.headers()['x-p3n-client'] ?? null);
+      return r.respond({ status: 401, contentType: 'application/json', body: JSON.stringify(FIXTURES.me) });
+    });
   }
   await opts.goto(`chrome-extension://${id}/ui/options.html`);
   await opts.type('#key', 'p3n_not_a_real_key');
@@ -266,6 +269,7 @@ try {
   ok('options: light and dark themes follow the browser', !darkWhenLight && darkAfter);
   await shot(opts, 'options-dark.png');
 
+  if (MOCK) ok('every API call names the client (X-P3N-Client)', [...mock.clients].join() === `p3n-chrome/${manifest.version}`, [...mock.clients].join(', '));
   ok('no console errors', errors.length === 0, errors.slice(0, 5).join(' || '));
 } finally {
   // browser.close() can stall after a failure; don't let it hang the run.

@@ -2,7 +2,7 @@
 
 The p3n extension sends text to p3n only when you ask it to.
 
-- **What it sends.** The text you selected, or typed into the panel, when you click Check for AI or Rewrite. If you added an API key, the key goes with it so p3n can bill your account.
+- **What it sends.** The text you selected, or typed into the panel, when you click Check for AI or Rewrite. If you added an API key, the key goes with it so p3n can bill your account. Each call also names the extension and its version (for example `p3n-chrome/0.1.1`), so your usage page can show which tool made it.
 - **Where it goes.** Only to `api.p3n.si`, over HTTPS.
 - **What it doesn't do.** It reads nothing until you click, and doesn't see the sites you visit. It keeps no history, and has no analytics or ads.
 - **What stays in your browser.** Your API key, in the extension's local storage. It isn't synced, and removing the extension deletes it.

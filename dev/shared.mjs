@@ -18,7 +18,7 @@ export const FIXTURES = {
 
 // Scores laid over the humanize fixture while set, for the headline cases below. `queue` replaces the next
 // answers in turn (the odd cases below), and `calls` counts the calls the stand-in API answered.
-export const mock = { humanizeScores: null, queue: [], calls: 0 };
+export const mock = { humanizeScores: null, queue: [], calls: 0, clients: new Set() };
 export const answer = (skill) => (skill === 'humanize' && mock.humanizeScores
   ? { ...FIXTURES.humanize, output: { ...FIXTURES.humanize.output, ...mock.humanizeScores } }
   : FIXTURES[skill]);
@@ -67,10 +67,11 @@ export const PAGES = {
 // Serves the test pages, and with `api: true` also a stand-in for api.p3n.si: the canned runs, and a 401
 // for any key on /v1/me (the options page's wrong-key check).
 export async function startServer({ api = false } = {}) {
-  const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Expose-Headers': 'X-Free-Remaining' };
+  const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept, X-P3N-Client', 'Access-Control-Expose-Headers': 'X-Free-Remaining' };
   const server = http.createServer((req, res) => {
     const skill = api && req.url.match(/^\/v1\/(?:runs\/mock-)?(detect|humanize)$/)?.[1];
     if (api && req.method === 'OPTIONS') return res.writeHead(204, cors).end();
+    if (api && req.url.startsWith('/v1/')) mock.clients.add(req.headers['x-p3n-client'] ?? null);
     if (skill) {
       const a = reply(skill);
       if (a.drop) return res.socket.destroy();
