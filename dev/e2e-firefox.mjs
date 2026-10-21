@@ -198,17 +198,15 @@ try {
   const stored = await opts.evaluate(async () => (await browser.storage.local.get('apiKey')).apiKey ?? null);
   ok('options: a wrong key is refused and not saved', /doesn't accept/.test(optMsg) && stored === null, optMsg);
 
-  // The sun/moon button: a click turns the panel dark and keeps it, the settings page follows, and a second click
-  // keeps light.
-  const theme = (p) => p.evaluate(async () => (await browser.storage.local.get('theme')).theme ?? null);
+  // The switch: the panel's header button turns it dark and saves it, the settings page follows, and System there
+  // follows the browser again.
+  const theme = (p) => p.evaluate(async () => ({ stored: (await browser.storage.local.get('theme')).theme ?? 'system', checked: document.querySelector('[data-theme-set][aria-checked="true"]')?.dataset.themeSet }));
   const turns = (p, dark) => p.waitForFunction(dark ? darkApplied : lightApplied, { timeout: 5000, polling: 100 }).then(() => true, () => false);
-  const toggle = () => panel.evaluate(() => document.querySelector('header [data-theme-toggle]').click());
-  await toggle();
-  ok("switch: the panel's button turns it dark and keeps it", await turns(panel, true) && (await theme(panel)) === 'dark');
-  ok('switch: the settings page follows', await turns(opts, true));
-  await toggle();
-  ok('switch: a second click keeps light', await turns(panel, false) && await turns(opts, false) && (await theme(panel)) === 'light');
-  await panel.evaluate(() => browser.storage.local.remove('theme'));
+  await panel.evaluate(() => document.querySelector('header [data-theme-toggle]').click());
+  ok("switch: the panel's button turns it dark and saves it", await turns(panel, true) && (await theme(panel)).stored === 'dark');
+  ok('switch: the settings page follows', await turns(opts, true) && (await theme(opts)).checked === 'dark');
+  await opts.evaluate(() => document.querySelector('[data-theme-set="system"]').click());
+  ok('switch: System follows the browser again', await turns(panel, false) && (await theme(panel)).stored === 'system');
 
   if (MOCK) ok('every API call names the client (X-P3N-Client)', [...mock.clients].join() === `p3n-firefox/${manifest.version}`, [...mock.clients].join(', '));
   ok('no script errors', errors.length === 0, errors.slice(0, 5).join(' || '));
