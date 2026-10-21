@@ -43,7 +43,7 @@ p3n sends the text you selected, only when you click, and only to `api.p3n.si`. 
 | `contextMenus` | The p3n item in the right-click menu. |
 | `activeTab`, `scripting` | Reading your selection, and replacing it, in the tab you right-clicked. Only after your click. |
 | `sidePanel` | Showing results next to the page. Firefox uses its sidebar. |
-| `storage` | Your API key, and passing the selection to the panel. |
+| `storage` | Your API key and light or dark choice, and passing the selection to the panel. |
 | `https://api.p3n.si/*` | The p3n API. No other site. |
 
 </details>

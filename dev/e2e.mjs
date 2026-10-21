@@ -3,7 +3,7 @@
 // A script can't click Chrome's own right-click menu, so it loads a dev copy of the extension that
 // also has host access to the local test server, and starts the same startJob the menu does, by message.
 import puppeteer from 'puppeteer-core';
-import { FIXTURES, GUARDS, HEADLINES, SHORT, darkApplied, mock, oddAnswers, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
+import { FIXTURES, GUARDS, HEADLINES, SHORT, darkApplied, lightApplied, mock, oddAnswers, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -268,6 +268,45 @@ try {
   const darkAfter = await opts.waitForFunction(darkApplied, { timeout: 5000, polling: 100 }).then(() => true, () => false);
   ok('options: light and dark themes follow the browser', !darkWhenLight && darkAfter);
   await shot(opts, 'options-dark.png');
+
+  // The switch, on a light browser: the panel's header button flips to dark and back to System; the settings page
+  // names all three; every open page follows; a choice holds when the panel opens again, from its first paint.
+  await opts.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+  const pane = await browser.newPage();
+  watch(pane, 'switch');
+  await pane.setViewport({ width: 380, height: 640 });
+  await pane.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+  // The theme when <body> appears, before storage.local has answered.
+  await pane.evaluateOnNewDocument(() => new MutationObserver((_, o) => { if (document.body) { window.firstTheme = document.documentElement.dataset.theme; o.disconnect(); } }).observe(document, { childList: true, subtree: true }));
+  await pane.goto(`chrome-extension://${id}/ui/panel.html`);
+  const theme = (p) => p.evaluate(async () => ({ stored: (await chrome.storage.local.get('theme')).theme ?? 'system', label: document.querySelector('[data-theme-toggle]')?.getAttribute('aria-label'), checked: document.querySelector('[data-theme-set][aria-checked="true"]')?.dataset.themeSet }));
+  const turns = (p, dark) => p.waitForFunction(dark ? darkApplied : lightApplied, { timeout: 5000, polling: 100 }).then(() => true, () => false);
+  // A DOM click: a page behind another paints no frames in headless Chrome.
+  const press = (p, sel) => p.$eval(sel, (b) => b.click());
+  const still = async (p, file) => { await p.bringToFront(); await new Promise((r) => setTimeout(r, 400)); await shot(p, file); };
+  const btn = await pane.$eval('header [data-theme-toggle]', (b) => { const r = b.getBoundingClientRect(); return r.width >= 32 && r.right <= innerWidth; });
+  ok('panel: the light/dark button is in the header', btn && (await theme(pane)).label === 'Switch to dark theme');
+  await still(pane, 'panel-switch-light.png');
+  await press(pane, '[data-theme-toggle]');
+  const t1 = await theme(pane);
+  ok('panel: the button turns a light browser\'s panel dark and saves it', await turns(pane, true) && t1.stored === 'dark' && t1.label === 'Switch to light theme', JSON.stringify(t1));
+  ok('options: follows the panel at once', await turns(opts, true) && (await theme(opts)).checked === 'dark');
+  await still(pane, 'panel-switch-dark.png');
+  await still(opts, 'options-switch-dark.png');
+  await pane.reload();
+  ok('panel: the choice holds when it opens again, from the first paint', await pane.evaluate(() => window.firstTheme) === 'dark' && await pane.evaluate(darkApplied));
+  await press(pane, '[data-theme-toggle]');
+  const t2 = await theme(pane);
+  ok('panel: a second click goes back to System', await turns(pane, false) && t2.stored === 'system' && t2.label === 'Switch to dark theme', JSON.stringify(t2));
+  await press(opts, '[data-theme-set="dark"]');
+  ok('options: Dark turns every open page dark', await turns(opts, true) && await turns(pane, true) && (await theme(pane)).stored === 'dark');
+  await press(opts, '[data-theme-set="light"]');
+  await pane.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
+  ok('options: Light holds on a dark browser', await turns(pane, false) && (await theme(opts)).checked === 'light');
+  await still(opts, 'options-switch-light.png');
+  await press(opts, '[data-theme-set="system"]');
+  ok('options: System follows the browser again', await turns(pane, true) && (await theme(pane)).stored === 'system');
+  await pane.close();
 
   if (MOCK) ok('every API call names the client (X-P3N-Client)', [...mock.clients].join() === `p3n-chrome/${manifest.version}`, [...mock.clients].join(', '));
   ok('no console errors', errors.length === 0, errors.slice(0, 5).join(' || '));

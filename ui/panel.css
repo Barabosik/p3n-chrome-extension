@@ -1,7 +1,8 @@
 body { display: flex; flex-direction: column; min-height: 100vh; }
 main { flex: 1; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 20px; }
 
-header.bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 12px; }
+header.bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 10px 10px 16px; }
+.bar-end { display: flex; align-items: center; gap: 6px; }
 .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; }
 .wordmark { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
 .wordmark span { color: var(--accent-text); }

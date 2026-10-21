@@ -98,9 +98,11 @@ export const scoreSettled = () => {
 
 // Page edits made after the selection was taken: Replace must refuse and leave the page as it is.
 // [page, select, edit (returns the page's text after the edit)]
-// The dark palette is on (ui/base.css, prefers-color-scheme): the page's ground and the header logo.
+// The dark palette is on (ui/base.css, ui/theme.js): the page's ground and the header logo that shows.
 export const darkApplied = () => getComputedStyle(document.body).backgroundColor === 'rgb(22, 19, 15)'
-  && document.querySelector('.brand img').currentSrc.endsWith('/icons/logo-dark.png');
+  && !![...document.querySelectorAll('.brand img')].find((i) => i.getClientRects().length)?.currentSrc.endsWith('/icons/logo-dark.png');
+export const lightApplied = () => getComputedStyle(document.body).backgroundColor === 'rgb(251, 250, 247)'
+  && !![...document.querySelectorAll('.brand img')].find((i) => i.getClientRects().length)?.currentSrc.endsWith('/icons/logo.png');
 
 export const GUARDS = [
   ['/textarea', selectField, () => { const b = document.querySelector('#box'); b.value = `Edited. ${b.value}`; return b.value; }],

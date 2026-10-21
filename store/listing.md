@@ -45,7 +45,7 @@ Privacy practices tab:
 - **activeTab:** Lets the extension read the selected text in the tab where the user picked a p3n menu item, only after that click.
 - **scripting:** Runs one small function in that tab to read the selection, and another to put the rewrite in its place when the user clicks Replace.
 - **sidePanel:** Shows the result in the side panel next to the page.
-- **storage:** Keeps the user's optional API key (local storage) and passes the selected text from the menu to the side panel (session storage).
+- **storage:** Keeps the user's optional API key and light/dark choice (local storage) and passes the selected text from the menu to the side panel (session storage).
 - **Host permission `https://api.p3n.si/*`:** The p3n API that checks and rewrites the text. It is the only host the extension contacts.
 - **Remote code:** No. All code ships in the package.
 - **Data collected:** Website content (the selected text, sent when the user clicks) and Authentication information (the optional API key). Not sold or transferred to third parties outside the approved use, not used for anything unrelated to the single purpose, not used for credit decisions.

@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdir, mkdtemp, readFile, writeFile, appendFile } from 'node:fs/promises';
-import { GUARDS, HEADLINES, SHORT, darkApplied, mock, oddAnswers, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
+import { GUARDS, HEADLINES, SHORT, darkApplied, lightApplied, mock, oddAnswers, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(import.meta.dirname, 'out');
@@ -197,6 +197,16 @@ try {
   const optMsg = await opts.$eval('#status', (s) => s.textContent);
   const stored = await opts.evaluate(async () => (await browser.storage.local.get('apiKey')).apiKey ?? null);
   ok('options: a wrong key is refused and not saved', /doesn't accept/.test(optMsg) && stored === null, optMsg);
+
+  // The switch: the panel's header button turns it dark and saves it, the settings page follows, and System there
+  // follows the browser again.
+  const theme = (p) => p.evaluate(async () => ({ stored: (await browser.storage.local.get('theme')).theme ?? 'system', checked: document.querySelector('[data-theme-set][aria-checked="true"]')?.dataset.themeSet }));
+  const turns = (p, dark) => p.waitForFunction(dark ? darkApplied : lightApplied, { timeout: 5000, polling: 100 }).then(() => true, () => false);
+  await panel.evaluate(() => document.querySelector('header [data-theme-toggle]').click());
+  ok("switch: the panel's button turns it dark and saves it", await turns(panel, true) && (await theme(panel)).stored === 'dark');
+  ok('switch: the settings page follows', await turns(opts, true) && (await theme(opts)).checked === 'dark');
+  await opts.evaluate(() => document.querySelector('[data-theme-set="system"]').click());
+  ok('switch: System follows the browser again', await turns(panel, false) && (await theme(panel)).stored === 'system');
 
   if (MOCK) ok('every API call names the client (X-P3N-Client)', [...mock.clients].join() === `p3n-firefox/${manifest.version}`, [...mock.clients].join(', '));
   ok('no script errors', errors.length === 0, errors.slice(0, 5).join(' || '));
