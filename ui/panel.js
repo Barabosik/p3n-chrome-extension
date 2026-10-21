@@ -207,6 +207,12 @@ function setBusy(skill) {
 // ---- results -----------------------------------------------------------------------------
 
 function render(run, text) {
+  // Without the fields this version reads, say so: don't show 0% or a script error.
+  const o = run.output;
+  if ((run.skill === 'detect' && typeof o?.ai !== 'number')
+    || (run.skill === 'humanize' && (typeof o?.text !== 'string' || typeof o?.ai_after !== 'number'))) {
+    return showError(new ApiError(502, 'bad_output', 'p3n answered without a result. Try again. If it keeps happening, update the extension.'));
+  }
   const body = run.skill === 'detect' ? renderDetect(run.output) : run.skill === 'humanize' ? renderHumanize(run.output, text) : [h('div', { class: 'rewrite' }, run.output?.text ?? '')];
   const meta = h('p', { class: 'small muted' }, `${run.output?.version ?? run.skill}${run.cached ? ' · from cache' : ''}${state.key && run.charged_usd ? ` · $${Number(run.charged_usd).toFixed(4)}` : ''}`);
   const box = stagger(h('div', { class: 'result-in', style: 'display:flex;flex-direction:column;gap:14px' }, body, meta));
