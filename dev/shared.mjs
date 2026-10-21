@@ -16,18 +16,18 @@ export const FIXTURES = {
   me: { error: { type: 'unauthorized', message: 'Invalid API key.' } },
 };
 
-// Scores laid over the humanize fixture while set, for the headline cases below. `next` replaces the next
-// skill answer (the odd cases below), and `calls` counts the skill calls the stand-in API answered.
-export const mock = { humanizeScores: null, next: null, calls: 0 };
+// Scores laid over the humanize fixture while set, for the headline cases below. `queue` replaces the next
+// answers in turn (the odd cases below), and `calls` counts the calls the stand-in API answered.
+export const mock = { humanizeScores: null, queue: [], calls: 0 };
 export const answer = (skill) => (skill === 'humanize' && mock.humanizeScores
   ? { ...FIXTURES.humanize, output: { ...FIXTURES.humanize.output, ...mock.humanizeScores } }
   : FIXTURES[skill]);
 
-// The stand-in API's answer to a skill call: { status, type, body }.
+// The stand-in API's answer to a skill call or a run poll: { status, type, body }, or { drop } to cut the connection.
 export function reply(skill) {
   mock.calls++;
-  const n = mock.next;
-  mock.next = null;
+  const n = mock.queue.shift();
+  if (n?.drop) return { drop: true };
   if (n?.html) return { status: n.status, type: 'text/html', body: n.html };
   return { status: n?.status ?? 200, type: 'application/json', body: JSON.stringify(n ? n.body : answer(skill)) };
 }
@@ -69,10 +69,11 @@ export const PAGES = {
 export async function startServer({ api = false } = {}) {
   const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Expose-Headers': 'X-Free-Remaining' };
   const server = http.createServer((req, res) => {
-    const skill = api && req.method === 'POST' && req.url.match(/^\/v1\/(detect|humanize)$/)?.[1];
+    const skill = api && req.url.match(/^\/v1\/(?:runs\/mock-)?(detect|humanize)$/)?.[1];
     if (api && req.method === 'OPTIONS') return res.writeHead(204, cors).end();
     if (skill) {
       const a = reply(skill);
+      if (a.drop) return res.socket.destroy();
       return res.writeHead(a.status, { ...cors, 'Content-Type': a.type, 'X-Free-Remaining': '9' }).end(a.body);
     }
     if (api && req.url === '/v1/me') return res.writeHead(401, { ...cors, 'Content-Type': 'application/json' }).end(JSON.stringify(FIXTURES.me));
@@ -104,7 +105,7 @@ export const GUARDS = [
 // Runs the ODD cases and a too-short Check in an open panel page.
 export async function oddAnswers(panel, ok) {
   for (const c of ODD) {
-    mock.next = c.next;
+    mock.queue = [c.next];
     await panel.evaluate((t, btn) => {
       document.querySelector('#result').replaceChildren();
       const el = document.querySelector('#text'); el.value = t; el.dispatchEvent(new Event('input')); document.querySelector(btn).click();
@@ -113,7 +114,7 @@ export async function oddAnswers(panel, ok) {
     const got = await panel.evaluate(() => ({ text: document.querySelector('#result').innerText, error: !!document.querySelector('#result .note.error'), href: document.querySelector('#result a.btn')?.href ?? null }));
     ok(`odd answer, ${c.name}`, got.error && c.want.test(got.text) && (!c.href || got.href === c.href), got.text.replace(/\s+/g, ' ').slice(0, 100));
   }
-  mock.next = null;
+  mock.queue = [];
   const calls = mock.calls;
   await panel.evaluate(() => {
     document.querySelector('#result').replaceChildren();
@@ -121,4 +122,16 @@ export async function oddAnswers(panel, ok) {
   });
   const msg = await panel.$eval('#result', (r) => r.innerText);
   ok('Check under 40 characters: explained, no call', /at least 40/.test(msg) && mock.calls === calls, msg.slice(0, 100));
+
+  // A long text answers 202 and the panel polls the run; a dropped connection on the way doesn't end it.
+  mock.queue = [{ status: 202, body: { ...FIXTURES.detect, status: 'queued', output: null } }, { drop: true }];
+  const before = mock.calls;
+  await panel.evaluate((t) => {
+    document.querySelector('#result').replaceChildren();
+    const el = document.querySelector('#text'); el.value = t; el.dispatchEvent(new Event('input')); document.querySelector('#check').click();
+  }, AI_TEXT);
+  await panel.waitForFunction(() => document.querySelector('#result')?.textContent.trim() && document.querySelector('#busy').hidden, { timeout: 20000, polling: 100 });
+  const polled = await panel.evaluate(() => ({ score: !!document.querySelector('#result .score'), text: document.querySelector('#result').innerText }));
+  ok('202 answer: polled through a dropped connection to the result', polled.score && mock.calls - before === 3, `${mock.calls - before} calls; ${polled.text.replace(/\s+/g, ' ').slice(0, 60)}`);
+  mock.queue = [];
 }

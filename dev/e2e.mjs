@@ -69,7 +69,8 @@ try {
     await p.setRequestInterception(true);
     p.on('request', (r) => {
       if (!r.url().startsWith('https://api.p3n.si/')) return r.continue();
-      const a = reply(r.url().match(/\/v1\/(detect|humanize)$/)?.[1] ?? 'detect');
+      const a = reply(r.url().match(/\/v1\/(?:runs\/mock-)?(detect|humanize)$/)?.[1] ?? 'detect');
+      if (a.drop) return r.abort('failed');
       r.respond({ status: a.status, contentType: a.type, headers: { 'X-Free-Remaining': '9' }, body: a.body });
     });
   };
