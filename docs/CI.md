@@ -1,6 +1,6 @@
 # CI and releases
 
-Two GitHub Actions workflows, in `.github/workflows/`. Both run on Ubuntu with Node 24, and install the dev tools from `dev/package-lock.json`.
+Two GitHub Actions workflows, in `.github/workflows/`. Both run on Ubuntu with Node 24, and install the dev tools from `dev/package-lock.json`. Neither keeps the job's GitHub token in the checkout (`persist-credentials: false`), so the tools' install scripts can't read it.
 
 ## ci.yml: every push and pull request to `main`
 
@@ -12,7 +12,7 @@ Two GitHub Actions workflows, in `.github/workflows/`. Both run on Ubuntu with N
 ## release.yml: a tag `v*`
 
 1. Fails unless the tag is `v` plus the `version` in `manifest.json`.
-2. Builds both zips, lints the Firefox build, and attaches the zips to a GitHub Release for the tag.
+2. Builds both zips, lints the Firefox build, runs the same mocked end-to-end checks as CI, and attaches the zips to a GitHub Release for the tag. A failed check stops the release before any store upload.
 3. Chrome Web Store, if its five secrets are set: uploads `p3n-chrome-<version>.zip` and submits it for review.
 4. addons.mozilla.org, if its two secrets are set: submits `dist/firefox` as a listed version for review (`web-ext sign --channel listed`). It doesn't wait for the review.
 

@@ -16,6 +16,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing here pushes; don't leave the job's token in .git/config for npm install scripts to read.
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
@@ -39,6 +42,15 @@ jobs:
       - name: Lint the Firefox build
         working-directory: dev
         run: npx web-ext lint -s ../dist/firefox
+
+      # The same mocked checks as CI, so a tag on a commit that fails them never reaches a store.
+      - name: End-to-end, Chrome (mocked API)
+        working-directory: dev
+        run: MOCK=1 CHROME="$(command -v google-chrome)" node e2e.mjs
+
+      - name: End-to-end, Firefox (mocked API)
+        working-directory: dev
+        run: MOCK=1 FIREFOX="$(command -v firefox)" node e2e-firefox.mjs
 
       # Upload instead of create on a re-run, so a re-run (say, after adding store secrets) gets past this.
       - name: GitHub Release
