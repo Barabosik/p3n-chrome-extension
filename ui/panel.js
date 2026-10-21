@@ -1,4 +1,4 @@
-import { runSkill, me, ApiError, LINKS, MAX_CHARS } from '../lib/api.js';
+import { runSkill, me, ApiError, LINKS, MAX_CHARS, MIN_DETECT_CHARS } from '../lib/api.js';
 import { captureSelection, replaceSelection } from '../lib/page.js';
 import { ext } from '../lib/ext.js';
 
@@ -169,6 +169,9 @@ async function start(skill, text, options) {
     return showError(new ApiError(422, 'too_long', state.key
       ? `That's ${text.length.toLocaleString()} characters; the API takes up to ${MAX_CHARS.key.toLocaleString()}. Select less.`
       : `That's ${text.length.toLocaleString()} characters. Without an API key p3n takes up to ${MAX_CHARS.free.toLocaleString()}. Select less, or add a key.`));
+  }
+  if (skill === 'detect' && [...text].length < MIN_DETECT_CHARS) {
+    return showError(new ApiError(422, 'too_short', `Check needs at least ${MIN_DETECT_CHARS} characters, a sentence or two. Select more.`));
   }
   const controller = new AbortController();
   state.controller = controller;
