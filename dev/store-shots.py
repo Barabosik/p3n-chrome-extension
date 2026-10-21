@@ -1,5 +1,6 @@
 # Builds the 1280x800 Chrome Web Store screenshots from the e2e run's captures (dev/out/):
-# the test page on the left, the side panel on the right.   python dev/store-shots.py
+# the test page on the left, the side panel on the right.   python dev/store-shots.py [check] [rewrite]
+import sys
 from pathlib import Path
 from PIL import Image
 
@@ -15,5 +16,9 @@ def shot(page, panel, name):
     c.save(ROOT / "store" / name, optimize=True)
     print(name, c.size)
 
-shot("page-article.png", "panel-article.png", "screenshot-check.png")
-shot("page-email-after.png", "panel-email-replaced.png", "screenshot-rewrite.png")
+SHOTS = {
+    "check": ("page-article.png", "panel-article.png", "screenshot-check.png"),
+    "rewrite": ("page-email-after.png", "panel-email-replaced.png", "screenshot-rewrite.png"),
+}
+for name in sys.argv[1:] or SHOTS:
+    shot(*SHOTS[name])

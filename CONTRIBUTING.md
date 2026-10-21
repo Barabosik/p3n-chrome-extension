@@ -33,7 +33,7 @@ A script can't click the browser's right-click menu or open the side panel. So t
 
 `node dev/build.mjs` writes `dist/chrome`, `dist/firefox` and a store zip of each. The Firefox build only rewrites the manifest. The zips are made with bsdtar or `zip`, because the stores want forward slashes in paths.
 
-Images: `python dev/store-shots.py` builds the store screenshots from a test run, `python dev/icons.py` the icons, `python dev/promo-tile.py` the promo tile. The store copy is in `store/listing.md`.
+Images: `python dev/store-shots.py` builds the store screenshots from a test run (`check` or `rewrite` builds just one), `python dev/icons.py` the icons, `python dev/promo-tile.py` the promo tile. The store copy is in `store/listing.md`.
 
 CI runs the mocked tests and the Firefox lint on every push. A `v*` tag builds a release and can upload to both stores; see [docs/CI.md](docs/CI.md).
 

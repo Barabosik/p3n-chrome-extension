@@ -2,7 +2,7 @@
 import http from 'node:http';
 
 export const AI_TEXT = "In today's fast-paced world, it's worth noting that effective communication is more important than ever. Moreover, leveraging the right tools can help teams unlock their full potential and navigate the complexities of modern work.";
-export const SHORT = 'Moreover, this seamless solution unlocks a rich tapestry of possibilities for teams of all sizes.';
+export const SHORT = 'Ultimately, this seamless transition unlocks a rich tapestry of possibilities for teams of all sizes, empowering everyone to thrive in an ever-evolving landscape.';
 
 // MOCK=1 answers the panel's API calls with these canned runs instead (no keyless calls used).
 export const FIXTURES = {
@@ -11,7 +11,7 @@ export const FIXTURES = {
       sentences: [{ text: AI_TEXT.split('. ')[0] + '.', why: 'A stock opening with a vague claim.' }], examples: [] } },
   humanize: { id: 'mock-humanize', skill: 'humanize', status: 'succeeded', cached: false, error: null, charged_usd: '0',
     // The live API ends the rewrite with a line break; the panel must not carry it into the page.
-    output: { version: 'humanize-v1.1', model: 'haiku', text: 'It works for teams of all sizes.\n', ai_before: 0.08, ai_after: 0.02, label_after: 'human', passes: true, invented_blocked: [] } },
+    output: { version: 'humanize-v1.3', model: 'haiku', text: 'This transition helps teams of all sizes.\n', ai_before: 0.95, ai_after: 0.01, label_after: 'human', passes: true, invented_blocked: [] } },
   // /v1/me with any key (the options page's wrong-key check), sent with a 401.
   me: { error: { type: 'unauthorized', message: 'Invalid API key.' } },
 };
