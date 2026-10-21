@@ -7,7 +7,7 @@ const els = {
   text: $('#text'), count: $('#count'), check: $('#check'), rewrite: $('#rewrite'), grab: $('#grab'), hint: $('#hint'),
   busy: $('#busy'), busyText: $('#busy-text'), cancel: $('#cancel'), result: $('#result'), quota: $('#quota'), account: $('#account'),
 };
-const state = { key: '', windowId: null, source: null, controller: null, timer: null, free: null, last: null };
+const state = { key: '', windowId: null, source: null, controller: null, timer: null, free: null, last: null, taking: null };
 
 // Tiny DOM builder. Strings become text nodes, so API text is never parsed as HTML.
 function h(tag, attrs = {}, ...kids) {
@@ -140,7 +140,10 @@ async function grabSelection() {
 // ---- jobs from the right-click menu ------------------------------------------------------
 
 async function takeJob(job) {
-  if (!job || job.windowId !== state.windowId) return;
+  if (!job || job.windowId !== state.windowId || state.taking === job.id) return;
+  // Boot and the change listener can both see a job that lands while the panel opens; claim it before
+  // any await, or both start it and the first call is still sent (and counted) before it's aborted.
+  state.taking = job.id;
   const { handled } = await ext.storage.session.get('handled');
   if (handled === job.id || Date.now() - job.at > 120_000) return;
   await ext.storage.session.set({ handled: job.id });
