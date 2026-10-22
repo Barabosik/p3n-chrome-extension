@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh">Chrome Web Store</a> (in review) · <a href="https://addons.mozilla.org/firefox/addon/p3n/">Firefox Add-ons</a> (in review) · <a href="https://p3n.si">p3n.si</a>
+  <a href="https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh">Chrome Web Store</a> · <a href="https://addons.mozilla.org/firefox/addon/p3n/">Firefox Add-ons</a> (in review) · <a href="https://p3n.si">p3n.si</a>
 </p>
 
 <p align="center">
@@ -50,10 +50,8 @@ p3n sends the text you selected, only when you click, and only to `api.p3n.si`. 
 
 ## Install from the store
 
-Both listings are in review, so these links don't work yet.
-
 - Chrome, Edge or Brave: [Chrome Web Store](https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh)
-- Firefox 140 or later: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/p3n/)
+- Firefox 140 or later: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/p3n/) (in review, so this link doesn't work yet)
 
 Store installs update themselves.
 

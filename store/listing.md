@@ -2,7 +2,7 @@
 
 What goes into the Chrome Web Store and addons.mozilla.org forms. The zips come from `node dev/build.mjs`, and the images are in this folder.
 
-Listings: Chrome Web Store item `bingopgkcgafmnpkoeckijkcbnfmchnh` (chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh once live), Firefox slug `p3n` (addons.mozilla.org/firefox/addon/p3n). Both submitted for review on 2026-10-20 as 0.1.0.
+Listings: Chrome Web Store item `bingopgkcgafmnpkoeckijkcbnfmchnh` (chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh), Firefox slug `p3n` (addons.mozilla.org/firefox/addon/p3n). Both submitted for review on 2026-10-20 as 0.1.0; Chrome approved it on 2026-10-21. Chrome 0.1.1 submitted on 2026-10-22 with the Chrome listing changes below; Firefox 0.1.1 waits for 0.1.0's approval.
 
 ## Description (both stores)
 
@@ -34,7 +34,8 @@ Open source: https://github.com/Barabosik/p3n-chrome-extension
 | Store icon | `icons/128.png` |
 | Screenshots | `screenshot-check.png`, `screenshot-rewrite.png` (1280×800) |
 | Small promo tile | `promo-440x280.png` |
-| Homepage | https://p3n.si |
+| Official URL | nikita-andreiev.com (verified in Search Console) |
+| Homepage | https://nikita-andreiev.com/p3n/ |
 | Support | https://github.com/Barabosik/p3n-chrome-extension/issues |
 | Privacy policy | https://github.com/Barabosik/p3n-chrome-extension/blob/main/PRIVACY.md |
 | Visibility | Public, all regions |
