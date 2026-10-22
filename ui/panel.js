@@ -391,7 +391,7 @@ async function refreshAccount() {
     const m = await me(state.key);
     els.quota.textContent = `Balance $${Number(m.balance_usd).toFixed(2)} · key ${m.key?.name ?? m.key?.prefix ?? ''}`;
   } catch (e) {
-    els.quota.textContent = e.type === 'unauthorized' ? 'Your API key wasn\'t accepted. Change it in the settings.' : '';
+    els.quota.textContent = e.type === 'unauthorized' ? 'Your API key wasn\'t accepted. Click API key at the top to change it.' : '';
   }
 }
 
