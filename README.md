@@ -5,7 +5,7 @@
 <h1 align="center">p3n for Chrome and Firefox</h1>
 
 <p align="center">
-  Select text on any page. See if it reads as AI-written, or rewrite it in place.
+  Select text on any page. See if it reads as AI-written, or rewrite it in place where you're typing.
 </p>
 
 <p align="center">
