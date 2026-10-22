@@ -3,7 +3,7 @@
 // A script can't click Chrome's own right-click menu, so it loads a dev copy of the extension that
 // also has host access to the local test server, and starts the same startJob the menu does, by message.
 import puppeteer from 'puppeteer-core';
-import { FIXTURES, GUARDS, HEADLINES, SHORT, darkApplied, lightApplied, mock, oddAnswers, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
+import { DOCS_PAGE, DOCS_URL, FIXTURES, GUARDS, HEADLINES, NOUNDO, SHORT, darkApplied, lightApplied, mock, oddAnswers, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -20,6 +20,8 @@ const ext = await mkdtemp(path.join(os.tmpdir(), 'p3n-ext-'));
 await cp(ROOT, ext, { recursive: true, filter: (src) => !/^[\\/]?(dev|dist|store|\.git|\.claude|node_modules)([\\/]|$)/.test(path.relative(ROOT, src)) });
 const manifest = JSON.parse(await readFile(path.join(ext, 'manifest.json'), 'utf8'));
 manifest.host_permissions.push('http://127.0.0.1/*');
+// The stand-in Docs page (shared.mjs): the access a click on p3n in that tab gives.
+manifest.host_permissions.push('https://docs.google.com/*');
 await writeFile(path.join(ext, 'manifest.json'), JSON.stringify(manifest, null, 2));
 // The test starts jobs with a message from an extension page: that wakes the service worker if
 // Chrome has put it to sleep, the way a real menu click does.
@@ -70,6 +72,7 @@ try {
     p.on('request', (r) => {
       if (!r.url().startsWith('https://api.p3n.si/')) return r.continue();
       mock.clients.add(r.headers()['x-p3n-client'] ?? null);
+      if (r.url().endsWith('/v1/me')) return r.respond({ status: 401, contentType: 'application/json', body: JSON.stringify(FIXTURES.me) });
       const a = reply(r.url().match(/\/v1\/(?:runs\/mock-)?(detect|humanize)$/)?.[1] ?? 'detect');
       if (a.drop) return r.abort('failed');
       r.respond({ status: a.status, contentType: a.type, headers: { 'X-Free-Remaining': '9' }, body: a.body });
@@ -125,6 +128,7 @@ try {
 
     if (skill === 'humanize' && !res.isError) {
       ok(`${name}: Replace button ${expectReplace ? 'shown' : 'hidden'}`, res.hasReplace === expectReplace);
+      if (url === '/textarea') ok(`${name}: the footnote says "The rewrite", not Humanize`, /The rewrite drops filler/.test(res.result) && !/Humanize/.test(res.result));
       if (expectReplace) {
         await panel.evaluate(() => [...document.querySelectorAll('#result button')].find((b) => b.textContent.startsWith('Replace')).click());
         await panel.waitForFunction(() => !document.querySelector('#result .note.small')?.hidden, { timeout: 10000 }).catch(() => {});
@@ -132,7 +136,7 @@ try {
         const status = await panel.evaluate(() => [...document.querySelectorAll('#result .note')].map((n) => n.textContent).join(' | '));
         await new Promise((r) => setTimeout(r, 500)); // the check mark draws
         await panel.screenshot({ path: path.join(OUT, `panel-${name}-replaced.png`), fullPage: true });
-        ok(`${name}: Replace puts the rewrite on the page`, after.replace(/\s+/g, ' ').includes(res.rewrite.replace(/\s+/g, ' ').trim()), status);
+        ok(`${name}: Replace puts the rewrite on the page, and says Ctrl+Z undoes it`, after.replace(/\s+/g, ' ').includes(res.rewrite.replace(/\s+/g, ' ').trim()) && /Ctrl\+Z/.test(status), status);
         if (url === '/rich') {
           ok(`${name}: text around the selection is kept`, after.includes('Hi team,') && after.includes('Thanks'));
           ok(`${name}: no blank line added`, !/\n\s*\n/.test(after.trim()), JSON.stringify(after));
@@ -223,6 +227,68 @@ try {
     }
   }
 
+  // An editor that refuses the browser's own edit: Replace still puts the rewrite in, doesn't promise Ctrl+Z, and
+  // the original stays in the panel. Canned answers only.
+  if (MOCK && (!only || only.includes('noundo'))) {
+    for (const [url, select] of NOUNDO) {
+      const tab = await browser.newPage();
+      watch(tab, 'noundo');
+      await tab.goto(base + url);
+      const text = await tab.evaluate(select);
+      const panel = await browser.newPage();
+      watch(panel, 'noundo panel');
+      await mockApi(panel);
+      await panel.goto(`chrome-extension://${id}/ui/panel.html`);
+      const windowId = await panel.evaluate(async () => (await chrome.windows.getCurrent()).id);
+      const tabId = await panel.evaluate(async (u) => (await chrome.tabs.query({ url: u }))[0]?.id, base + url);
+      await panel.evaluate((info, t) => chrome.runtime.sendMessage({ p3nTest: 'startJob', args: ['humanize', info, t] }), { selectionText: text, frameId: 0 }, { id: tabId, windowId });
+      await panel.waitForFunction(() => [...document.querySelectorAll('#result button')].some((b) => b.textContent.startsWith('Replace')) && document.querySelector('#busy').hidden, { timeout: 15000, polling: 100 });
+      await panel.evaluate((t) => chrome.scripting.executeScript({ target: { tabId: t }, func: () => { document.execCommand = () => false; } }), tabId);
+      await panel.evaluate(() => [...document.querySelectorAll('#result button')].find((b) => b.textContent.startsWith('Replace')).click());
+      await panel.waitForFunction(() => !document.querySelector('#result .note.small')?.hidden, { timeout: 10000, polling: 100 }).catch(() => {});
+      const after = await tab.evaluate(() => { const b = document.querySelector('#box'); return b.value ?? b.innerText; });
+      const res = await panel.evaluate(() => ({ box: document.querySelector('#text').value, rewrite: document.querySelector('#result .rewrite').textContent, status: document.querySelector('#result .note.small')?.textContent ?? '' }));
+      ok(`noundo ${url}: Replace puts the rewrite in, no Ctrl+Z promised, original kept in the panel`,
+        after.replace(/\s+/g, ' ').includes(res.rewrite.replace(/\s+/g, ' ').trim()) && /can't undo/.test(res.status) && !/Ctrl\+Z/.test(res.status) && res.box.trim() === text.trim(), res.status);
+      await panel.close();
+      await tab.close();
+    }
+  }
+
+  // Use selected text: the page's selection comes into the panel; with nothing selected it says so; and in Google
+  // Docs (the stand-in at its address), which draws its own text, it says to paste instead. Canned answers only.
+  if (MOCK && (!only || only.includes('grab'))) {
+    const tab = await browser.newPage();
+    watch(tab, 'grab');
+    await tab.goto(`${base}/static`);
+    const docs = await browser.newPage();
+    watch(docs, 'grab docs');
+    await docs.setRequestInterception(true);
+    docs.on('request', (r) => (r.url().startsWith('https://docs.google.com/') ? r.respond({ status: 200, contentType: 'text/html', body: DOCS_PAGE }) : r.abort()));
+    await docs.goto(DOCS_URL);
+    const panel = await browser.newPage();
+    watch(panel, 'grab panel');
+    await panel.goto(`chrome-extension://${id}/ui/panel.html`);
+    // With `page` in front, as the user sees it next to the panel.
+    const grab = async (page) => {
+      await page.bringToFront();
+      await panel.evaluate(() => { document.querySelector('#text').value = ''; document.querySelector('#grab').click(); });
+      await panel.waitForFunction(() => document.querySelector('#text').value || !document.querySelector('#hint').hidden, { timeout: 5000, polling: 100 }).catch(() => {});
+      return panel.evaluate(() => ({ text: document.querySelector('#text').value, hint: document.querySelector('#hint').hidden ? '' : document.querySelector('#hint').textContent }));
+    };
+    const text = await tab.evaluate(selectNode('#box'));
+    const got = await grab(tab);
+    ok('grab: Use selected text brings the selection in', got.text.trim() === text.trim() && !got.hint, got.hint || got.text.slice(0, 40));
+    await tab.evaluate(() => getSelection().removeAllRanges());
+    const none = await grab(tab);
+    ok('grab: nothing selected, says so', /^Nothing is selected/.test(none.hint) && !none.text, none.hint);
+    const inDocs = await grab(docs);
+    ok('grab: in Google Docs, says to copy and paste instead', inDocs.hint === "p3n can't read what you select in Google Docs. Copy the text and paste it in the box." && !inDocs.text, inDocs.hint);
+    await panel.close();
+    await docs.close();
+    await tab.close();
+  }
+
   // Errors and answers missing their fields. Canned answers only.
   if (MOCK && (!only || only.includes('odd'))) {
     const panel = await browser.newPage();
@@ -261,6 +327,8 @@ try {
   // Read from the page, not the service worker: Chrome may have put the worker to sleep by now.
   const stored = await opts.evaluate(async () => (await chrome.storage.local.get('apiKey')).apiKey ?? null);
   ok('options: a wrong key is refused and not saved', /doesn't accept/.test(optMsg) && stored === null, optMsg);
+  const keyCopy = await opts.$eval('main section p', (p) => p.textContent.replace(/\s+/g, ' '));
+  ok('options: sign up at p3n.si, then create a key', /sign up at p3n\.si \(you get free credit\), then create a key on the API keys page/.test(keyCopy), keyCopy.slice(0, 120));
   const darkWhenLight = await opts.evaluate(darkApplied);
   await shot(opts, 'options.png');
   await opts.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);

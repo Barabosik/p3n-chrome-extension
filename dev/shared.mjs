@@ -34,7 +34,8 @@ export function reply(skill) {
 
 // Errors and answers missing their fields: the panel explains each one, with no script error.
 export const ODD = [
-  { name: 'free limit: own copy, Sign up only to p3n.si', skill: 'detect', want: /used up; more in about 10 min/, href: 'https://p3n.si/register',
+  { name: 'free limit: free calls, sign up then create a key, Sign up only to p3n.si', skill: 'detect', href: 'https://p3n.si/register',
+    want: /The free calls for this hour are used up; more in about 10 min\.\s+Sign up at p3n\.si for free credit, then create an API key and add it here to keep going\./,
     next: { status: 429, body: { error: { type: 'free_limit', message: 'Free calls are used up.', signup_url: 'javascript:alert(1)', retry_after_seconds: 600 } } } },
   { name: "504 too_long: the API's message", skill: 'humanize', want: /send a shorter text/,
     next: { status: 504, body: { error: { type: 'too_long', message: 'The text took longer than 85 s to process; send a shorter text. Not charged.' } } } },
@@ -63,6 +64,10 @@ export const PAGES = {
   '/static': page(`<h1>Blog post</h1><article><p id="box">${AI_TEXT}</p></article>`),
   '/lines': page(`<h1>Notes</h1><textarea id="box">Intro line.\n${SHORT}</textarea>`),
 };
+// A stand-in for a Google Docs document at its real address, answered by the test and never fetched. Docs draws its
+// text on a canvas, so a script finds no selection there.
+export const DOCS_URL = 'https://docs.google.com/document/d/p3n-test/edit';
+export const DOCS_PAGE = page('<h1>Untitled document</h1><canvas width="600" height="200"></canvas>');
 
 // Serves the test pages, and with `api: true` also a stand-in for api.p3n.si: the canned runs, and a 401
 // for any key on /v1/me (the options page's wrong-key check).
@@ -104,12 +109,16 @@ export const darkApplied = () => getComputedStyle(document.body).backgroundColor
 export const lightApplied = () => getComputedStyle(document.body).backgroundColor === 'rgb(251, 250, 247)'
   && !![...document.querySelectorAll('.brand img')].find((i) => i.getClientRects().length)?.currentSrc.endsWith('/icons/logo.png');
 
+// An editor that refuses the browser's own edit, so Replace puts the text in directly and the page can't undo it:
+// [page, select]. The tests make execCommand fail in the extension's isolated world there, where lib/page.js runs.
+export const NOUNDO = [['/textarea', selectField], ['/rich', selectNode('#box div:nth-child(2)')]];
+
 export const GUARDS = [
   ['/textarea', selectField, () => { const b = document.querySelector('#box'); b.value = `Edited. ${b.value}`; return b.value; }],
   ['/rich', selectNode('#box div:nth-child(2)'), () => { document.querySelector('#box div:nth-child(2)').firstChild.insertData(0, 'Edited. '); return document.querySelector('#box').innerText; }],
 ];
 
-// Runs the ODD cases and a too-short Check in an open panel page.
+// Runs in an open panel page: the ODD cases, a too-short Check and Rewrite, a 202 poll and a refused key.
 export async function oddAnswers(panel, ok) {
   for (const c of ODD) {
     mock.queue = [c.next];
@@ -129,6 +138,30 @@ export async function oddAnswers(panel, ok) {
   });
   const msg = await panel.$eval('#result', (r) => r.innerText);
   ok('Check under 40 characters: explained, no call', /at least 40/.test(msg) && mock.calls === calls, msg.slice(0, 100));
+
+  // Rewrite needs eight words, counted as the API counts them (numbers aren't words): refused before any call.
+  const rewrite = (t) => panel.evaluate((text) => {
+    document.querySelector('#result').replaceChildren();
+    const el = document.querySelector('#text'); el.value = text; el.dispatchEvent(new Event('input')); document.querySelector('#rewrite').click();
+  }, t);
+  const refused = [];
+  for (const t of ['Too short to rewrite here.', 'Revenue rose 12% to 4.2M in Q3 2026.']) {
+    await rewrite(t);
+    refused.push(await panel.$eval('#result', (r) => r.innerText.trim()));
+  }
+  ok('Rewrite under eight words: explained, no call', refused.every((m) => m === 'Rewrite needs at least a sentence of eight words. Select more.') && mock.calls === calls, refused.join(' | '));
+  await rewrite('We moved the office to Tivolska in March.');
+  await panel.waitForFunction(() => document.querySelector('#result')?.textContent.trim() && document.querySelector('#busy').hidden, { timeout: 15000, polling: 100 });
+  ok('Rewrite of eight words: sent', mock.calls - calls === 1 && await panel.evaluate(() => !!document.querySelector('#result .score')), `${mock.calls - calls} calls`);
+
+  // A key p3n refuses (the stand-in API refuses every key): the panel's foot points at the API key button at its top,
+  // which Firefox has too (its toolbar button has no Options item).
+  await panel.evaluate(() => (globalThis.browser ?? chrome).storage.local.set({ apiKey: 'p3n_not_a_real_key' }));
+  await panel.waitForFunction(() => /accepted/.test(document.querySelector('#quota').textContent), { timeout: 10000, polling: 100 }).catch(() => {});
+  const foot = await panel.evaluate(() => ({ quota: document.querySelector('#quota').textContent, button: document.querySelector('#account').textContent }));
+  await panel.evaluate(() => (globalThis.browser ?? chrome).storage.local.remove('apiKey'));
+  await panel.waitForFunction(() => document.querySelector('#account').textContent === 'Add API key', { timeout: 5000, polling: 100 }).catch(() => {});
+  ok('key refused: the foot points at API key at the top', foot.quota === "Your API key wasn't accepted. Click API key at the top to change it." && foot.button === 'API key', foot.quota);
 
   // A long text answers 202 and the panel polls the run; a dropped connection on the way doesn't end it.
   mock.queue = [{ status: 202, body: { ...FIXTURES.detect, status: 'queued', output: null } }, { drop: true }];
