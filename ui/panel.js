@@ -118,6 +118,11 @@ els.cancel.addEventListener('click', () => state.controller?.abort());
 els.grab.addEventListener('click', grabSelection);
 els.account.addEventListener('click', () => ext.runtime.openOptionsPage());
 
+// Google Docs draws its own text and menus, so there's no selection to read there, and p3n isn't in its right-click
+// menu. The tab's address is known only with the one-time access below.
+const inGoogleDocs = (tab) => /^https:\/\/docs\.google\.com\//.test(tab.url ?? '');
+const DOCS_HINT = 'p3n can\'t read what you select in Google Docs. Copy the text and paste it in the box.';
+
 // Pulls the selection from the active tab. Works after the toolbar button or the right-click menu
 // opened the panel (both give one-time access to that tab).
 async function grabSelection() {
@@ -127,13 +132,13 @@ async function grabSelection() {
   try {
     const results = await ext.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: captureSelection });
     const hit = results.find((r) => r.result?.text?.trim());
-    if (!hit) return hint('Nothing is selected on the page. Select some text first.');
+    if (!hit) return hint(inGoogleDocs(tab) ? DOCS_HINT : 'Nothing is selected on the page. Select some text first.');
     state.source = { tabId: tab.id, frameId: hit.frameId, editable: hit.result.editable, text: hit.result.text };
     els.text.value = hit.result.text;
     arrived();
     refreshInput();
   } catch {
-    hint('p3n can\'t read this page from here. Select the text, right-click it and choose p3n, or paste it in the box.');
+    hint(inGoogleDocs(tab) ? DOCS_HINT : 'p3n can\'t read this page from here. Select the text, right-click it and choose p3n, or paste it in the box.');
   }
 }
 
