@@ -330,7 +330,9 @@ async function replaceOnPage(text, button, status) {
       button.replaceChildren(checkMark(), 'Replaced');
       button.className = 'btn ok';
       button.disabled = true; // a disabled button loses focus: keep it on the status that says what happened
-      say('Replaced on the page. Ctrl+Z (Cmd+Z on a Mac) in the page undoes it.', 'ok');
+      // Ctrl+Z only when the page's undo history has the edit (lib/page.js).
+      say(r.undo ? 'Replaced on the page. Ctrl+Z (Cmd+Z on a Mac) in the page undoes it.'
+        : 'Replaced on the page. This editor can\'t undo it; your original is still in the Text box above.', 'ok');
       if (hadFocus) focusOn(status);
       return;
     }
