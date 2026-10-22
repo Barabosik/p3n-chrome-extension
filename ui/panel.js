@@ -312,7 +312,7 @@ function renderHumanize(o, sent) {
   if (o.invented_blocked?.length) {
     parts.push(h('p', { class: 'small muted' }, `Kept as sent where a rewrite added ${o.invented_blocked.join(', ')}, which the text does not have.`));
   }
-  parts.push(h('p', { class: 'small muted' }, 'Humanize drops filler and general statements that carry no fact. Check that every claim you need is still there.'));
+  parts.push(h('p', { class: 'small muted' }, 'The rewrite drops filler and general statements that carry no fact. Check that every claim you need is still there.'));
   return parts;
 }
 
@@ -346,8 +346,8 @@ function showError(e) {
       const mins = e.retryAfter ? Math.max(1, Math.ceil(e.retryAfter / 60)) : null;
       // The link comes from the API's answer: follow it only to p3n's own site.
       const signup = e.signupUrl?.startsWith(`${SITE}/`) ? e.signupUrl : LINKS.signup;
-      kids.push(h('p', {}, `The free checks for this hour are used up${mins ? `; more in about ${mins} min` : ''}.`),
-        h('p', { class: 'small' }, 'Sign up for free credit and an API key, then paste the key here to keep going.'),
+      kids.push(h('p', {}, `The free calls for this hour are used up${mins ? `; more in about ${mins} min` : ''}.`),
+        h('p', { class: 'small' }, 'Sign up at p3n.si for free credit, then create an API key and add it here to keep going.'),
         h('div', { class: 'row' }, h('a', { class: 'btn accent', href: signup, target: '_blank', rel: 'noopener', style: 'text-decoration:none' }, 'Sign up'), keyBtn('Add an API key')));
       break;
     }
