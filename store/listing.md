@@ -2,7 +2,7 @@
 
 What goes into the Chrome Web Store and addons.mozilla.org forms. The zips come from `node dev/build.mjs`, and the images are in this folder.
 
-Listings: Chrome Web Store item `bingopgkcgafmnpkoeckijkcbnfmchnh` (chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh), Firefox slug `p3n` (addons.mozilla.org/firefox/addon/p3n). Both submitted for review on 2026-10-20 as 0.1.0; Chrome approved it on 2026-10-21. Chrome 0.1.1 submitted on 2026-10-22 with the Chrome listing changes below; Firefox 0.1.1 waits for 0.1.0's approval.
+Listings: Chrome Web Store item `bingopgkcgafmnpkoeckijkcbnfmchnh` (chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh), Firefox slug `p3n` (addons.mozilla.org/firefox/addon/p3n). Both submitted for review on 2026-10-20 as 0.1.0; Chrome approved it on 2026-10-21. Chrome 0.1.1 submitted on 2026-10-22 with the Chrome listing changes below; Firefox 0.1.1 waits for 0.1.0's approval. 0.1.2 is next: see [0.1.2](#012) at the end.
 
 ## Description (both stores)
 
@@ -15,13 +15,15 @@ Rewrite: a new version that keeps your facts and drops the filler. Replace puts 
 
 Results open in the side panel, next to the page.
 
-Free to try: without an account you get 10 checks or rewrites an hour, up to 5,000 characters each. For more, add an API key from p3n.si.
+Free to try: without an account you get 10 checks or rewrites an hour, up to 5,000 characters each. For more, sign up at p3n.si (you get free credit), then create an API key.
 
-Privacy: p3n sends only the text you selected, only when you click, and only to api.p3n.si. It keeps no history and has no analytics.
+Privacy: the extension sends only the text you selected, only when you click, and only to api.p3n.si. The extension keeps no history and has no analytics. p3n.si keeps the text for up to 7 days.
 
 Google Docs replaces the browser's right-click menu, so p3n doesn't show up there. Paste the text into the panel instead.
 
 Open source: https://github.com/Barabosik/p3n-chrome-extension
+
+Other p3n apps: https://nikita-andreiev.com/p3n/
 ```
 
 ## Chrome Web Store
@@ -74,3 +76,20 @@ To test without an account: select text on any page, right-click, p3n > Check fo
 
 The add-on contacts only https://api.p3n.si, and only when the user clicks. Data collection: websiteContent (the selected text) and authenticationInfo (the optional API key).
 ```
+
+## 0.1.2
+
+Ready, not submitted. Chrome: after it approves 0.1.1. Firefox: after AMO approves 0.1.0.
+
+What's new (AMO's version notes; the Chrome Web Store has no such field):
+
+```
+- Clearer messages: the free limit counts free calls and says to sign up at p3n.si, then create an API key; a refused key points to the API key button.
+- Rewrite says when a selection is under eight words, before it uses a call.
+- Replace mentions Ctrl+Z only where the page can undo it, and Use selected text in Google Docs says to paste instead.
+```
+
+Listing changes that go with it, in both stores:
+- **Description:** the free line (sign up, then create a key), the privacy line (the extension keeps no history; p3n.si keeps the text for up to 7 days), and a last line, "Other p3n apps: https://nikita-andreiev.com/p3n/".
+- **Screenshot:** `screenshot-rewrite.png`, rebuilt from the mocked run. Only its footnote changed ("The rewrite drops filler…", was "Humanize drops filler…"). `screenshot-check.png` and the promo tile stay.
+- **Unchanged:** the summary (the manifest's `description`), permissions, host permissions, data collection and the privacy practices answers.

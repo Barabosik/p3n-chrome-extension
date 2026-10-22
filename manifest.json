@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "p3n: find the AI in any text",
   "short_name": "p3n",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Select text, right-click, and see whether it reads as AI-written. Rewrite it so it doesn't, without leaving the page.",
   "minimum_chrome_version": "116",
   "icons": {
