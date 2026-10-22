@@ -9,11 +9,12 @@
 </p>
 
 <p align="center">
-  <a href="https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh">Chrome Web Store</a> · <a href="https://addons.mozilla.org/firefox/addon/p3n/">Firefox Add-ons</a> (in review) · <a href="https://p3n.si">p3n.si</a>
+  <a href="https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh">Chrome Web Store</a> · <a href="https://addons.mozilla.org/firefox/addon/p3n/">Firefox Add-ons</a> (in review) · <a href="https://p3n.si">p3n.si</a> · <a href="https://nikita-andreiev.com/p3n/">All p3n apps</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/Barabosik/p3n-chrome-extension/actions/workflows/ci.yml"><img src="https://github.com/Barabosik/p3n-chrome-extension/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh"><img src="https://img.shields.io/chrome-web-store/v/bingopgkcgafmnpkoeckijkcbnfmchnh?label=Chrome%20Web%20Store" alt="Chrome Web Store version"></a>
 </p>
 
 ![Check for AI](store/screenshot-check.png)
@@ -29,11 +30,11 @@
 
 ## Free, or with a key
 
-You get 10 checks or rewrites an hour without an account, up to 5,000 characters each. For more, make an API key at [p3n.si](https://p3n.si/dashboard/keys) and paste it into the extension's options (right-click the icon, then Options).
+You get 10 checks or rewrites an hour without an account, up to 5,000 characters each. For more, [sign up at p3n.si](https://p3n.si/register) (you get free credit), make a key on the [API keys](https://p3n.si/dashboard/keys) page, and add it with **Add API key** at the top of the p3n panel.
 
 ## Privacy
 
-p3n sends the text you selected, only when you click, and only to `api.p3n.si`. It keeps no history and has no analytics. Your API key stays in this browser. The details are in [PRIVACY.md](PRIVACY.md).
+The extension sends the text you selected to `api.p3n.si`, and only when you click. The extension keeps no history and has no analytics, and your API key stays in this browser. p3n.si keeps the text for up to 7 days. The details are in [PRIVACY.md](PRIVACY.md).
 
 <details>
 <summary>What each permission is for</summary>
@@ -66,6 +67,10 @@ Installs from source don't update themselves.
 ## Known gaps
 
 Google Docs replaces the browser's right-click menu, so p3n isn't in it there. Paste the text into the panel instead. There's no Safari or Firefox for Android version yet.
+
+## Other p3n apps
+
+p3n also works in [Word and Excel](https://nikita-andreiev.com/p3n/#office), [Google Docs](https://nikita-andreiev.com/p3n/#docs), [VS Code](https://nikita-andreiev.com/p3n/#vscode), [Obsidian](https://nikita-andreiev.com/p3n/#obsidian) and [Sublime Text](https://nikita-andreiev.com/p3n/#sublime). Install steps for each are on [nikita-andreiev.com/p3n](https://nikita-andreiev.com/p3n/).
 
 ## Develop
 
