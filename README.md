@@ -9,12 +9,13 @@
 </p>
 
 <p align="center">
-  <a href="https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh">Chrome Web Store</a> · <a href="https://addons.mozilla.org/firefox/addon/p3n/">Firefox Add-ons</a> (in review) · <a href="https://p3n.si">p3n.si</a> · <a href="https://nikita-andreiev.com/p3n/">All p3n apps</a>
+  <a href="https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh">Chrome Web Store</a> · <a href="https://addons.mozilla.org/firefox/addon/p3n/">Firefox Add-ons</a> · <a href="https://p3n.si">p3n.si</a> · <a href="https://nikita-andreiev.com/p3n/">All p3n apps</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/Barabosik/p3n-chrome-extension/actions/workflows/ci.yml"><img src="https://github.com/Barabosik/p3n-chrome-extension/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh"><img src="https://img.shields.io/chrome-web-store/v/bingopgkcgafmnpkoeckijkcbnfmchnh?label=Chrome%20Web%20Store" alt="Chrome Web Store version"></a>
+  <a href="https://addons.mozilla.org/firefox/addon/p3n/"><img src="https://img.shields.io/amo/v/p3n?label=Firefox%20Add-ons" alt="Firefox Add-ons version"></a>
 </p>
 
 ![Check for AI](store/screenshot-check.png)
@@ -52,7 +53,7 @@ The extension sends the text you selected to `api.p3n.si`, and only when you cli
 ## Install from the store
 
 - Chrome, Edge or Brave: [Chrome Web Store](https://chromewebstore.google.com/detail/bingopgkcgafmnpkoeckijkcbnfmchnh)
-- Firefox 140 or later: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/p3n/) (in review, so this link doesn't work yet)
+- Firefox 140 or later: [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/p3n/)
 
 Store installs update themselves.
 
