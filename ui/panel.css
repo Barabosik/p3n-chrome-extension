@@ -64,3 +64,5 @@ h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
 .rewrite { white-space: pre-wrap; background: var(--tint); border-radius: var(--radius); padding: 12px; font-size: 15px; line-height: 1.6; }
 
 footer.foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 14px; }
+/* The quota line, then the link to p3n.si; they wrap in a narrow sidebar and leave the icons on the right. */
+.foot-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; overflow-wrap: anywhere; }

@@ -87,6 +87,7 @@ What's new (AMO's version notes; the Chrome Web Store has no such field):
 - Clearer messages: the free limit counts free calls and says to sign up at p3n.si, then create an API key; a refused key points to the API key button.
 - Rewrite says when a selection is under eight words, before it uses a call.
 - Replace mentions Ctrl+Z only where the page can undo it, and Use selected text in Google Docs says to paste instead.
+- A p3n.si link at the foot of the panel, and the theme button that follows your system is labelled "Match system theme".
 ```
 
 Listing changes that go with it, in both stores:

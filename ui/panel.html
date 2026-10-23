@@ -45,11 +45,15 @@
     <section id="result" aria-live="polite"></section>
   </main>
 
-  <!-- System, Light or Dark, as in p3n.si's footer (theme.js); also on the settings page. -->
+  <!-- The quota line (panel.js rewrites it) with a link to p3n.si under it, outside it; System, Light or Dark, as in
+       p3n.si's footer (theme.js), also on the settings page. -->
   <footer class="foot">
-    <span id="quota" class="small muted"></span>
+    <div class="foot-text">
+      <span id="quota" class="small muted"></span>
+      <a class="link small" href="https://p3n.si/" target="_blank" rel="noopener" title="Open p3n.si in your browser">p3n.si<span aria-hidden="true"> ↗</span></a>
+    </div>
     <div class="pill" role="radiogroup" aria-label="Theme">
-      <button type="button" role="radio" aria-checked="false" data-theme-set="system" aria-label="System" title="System"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.75" y="3.75" width="14.5" height="10" rx="1.5"/><path d="M7 16.75h6M10 13.75v3"/></svg></button>
+      <button type="button" role="radio" aria-checked="false" data-theme-set="system" aria-label="Match system theme" title="Match system theme"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.75" y="3.75" width="14.5" height="10" rx="1.5"/><path d="M7 16.75h6M10 13.75v3"/></svg></button>
       <button type="button" role="radio" aria-checked="false" data-theme-set="light" aria-label="Light" title="Light"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="3.25"/><path d="M10 2.5v1.5M10 16v1.5M2.5 10H4M16 10h1.5M4.7 4.7l1.05 1.05M14.25 14.25l1.05 1.05M4.7 15.3l1.05-1.05M14.25 5.75l1.05-1.05"/></svg></button>
       <button type="button" role="radio" aria-checked="false" data-theme-set="dark" aria-label="Dark" title="Dark"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.25 12.1A6.5 6.5 0 0 1 7.9 3.75a6.5 6.5 0 1 0 8.35 8.35z"/></svg></button>
     </div>
