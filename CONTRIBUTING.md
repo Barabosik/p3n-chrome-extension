@@ -5,7 +5,8 @@ Plain JavaScript with no bundler. Chrome loads the repo folder as it is. `dev/` 
 ## Layout
 
 - `background.js`: the right-click menu. On a click it opens the panel, reads the selection and hands it over.
-- `lib/page.js`: the two functions injected into the page. One reads the selection, the other replaces it with `execCommand('insertText')` so undo works. If the editor refuses that, the text goes in directly and the panel doesn't promise undo.
+- `lib/page.js`: the functions injected into the page. One reads the selection, another replaces it with `execCommand('insertText')` so undo works. If the editor refuses that, the text goes in directly and the panel doesn't promise undo. The others mark the sentences a Check lists in that selection with CSS Custom Highlights, which leave the page's DOM as it is, and take the marks away.
+- `lib/match.js`: finds those sentences in the text that was checked, compared as p3n's other apps compare them.
 - `lib/api.js`: the API client.
 - `lib/ext.js`: what differs between Chrome and Firefox.
 - `ui/panel.*`: the side panel. It calls the API itself, because the browser can stop the background script during a long rewrite.
@@ -23,11 +24,12 @@ npm run lint:firefox
 
 The tests load the extension into a headless Chrome or Firefox, open local test pages (an article, a textarea, a webmail-style editor) and run Check and Rewrite, including Replace and undo. `MOCK=1` answers with canned API results. Without it the tests call the live API and use 3 or 4 of the free hourly calls.
 
-- `ONLY=article,textarea,email,headline,guard,noundo,grab,odd` runs some of the scenarios. These run only with `MOCK=1`:
+- `ONLY=article,textarea,email,headline,guard,noundo,grab,marks,odd` runs some of the scenarios. These run only with `MOCK=1`:
   - `headline` checks the rewrite's headline for each kind of score;
   - `guard`, that Replace refuses once the page text has changed;
   - `noundo`, that Replace in an editor that refuses `execCommand` still works and doesn't promise Ctrl+Z;
   - `grab`, Use selected text: with a selection, with none, and on a stand-in Google Docs page at its real address (answered by the test, never fetched);
+  - `marks`, the highlights after a Check: the matcher, the marks on the page (CSS Custom Highlights) and in the panel ("In your text"), and what clears them;
   - `odd`, the error answers (free limit, too long, an HTML error page, a failed run, an answer without its result), a Check under 40 characters, a Rewrite under eight words, a 202 answer polled through a dropped connection, and a key p3n refuses.
 - Light and dark: the pages follow the browser's setting until the user picks Light or Dark (the icons at the panel's foot, or Appearance in the settings), and the tests set the browser's either way. In Chrome the mocked `lines` and `article-dark` run in dark, the options page is checked in both, and the choice is checked in the panel and the settings, open pages following each other; Firefox checks it too, and dark in a second browser (`dark`).
 - `CHROME=` and `FIREFOX=` point at another browser binary. Edge and Brave work as `CHROME=`.

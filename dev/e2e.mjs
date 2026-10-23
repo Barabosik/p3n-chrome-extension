@@ -3,7 +3,7 @@
 // A script can't click Chrome's own right-click menu, so it loads a dev copy of the extension that
 // also has host access to the local test server, and starts the same startJob the menu does, by message.
 import puppeteer from 'puppeteer-core';
-import { DOCS_PAGE, DOCS_URL, FIXTURES, GUARDS, HEADLINES, NOUNDO, SHORT, darkApplied, footFits, footLayout, lightApplied, mock, oddAnswers, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, siteLink, siteLinkRight, startServer, systemLabels } from './shared.mjs';
+import { AI_TEXT, DOCS_PAGE, DOCS_URL, FIXTURES, GUARDS, HEADLINES, MARKED, NOUNDO, SHORT, darkApplied, footFits, footLayout, lightApplied, matcherChecks, mock, noPageMarks, oddAnswers, pageMarks, panelMarked, panelMarks, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, siteLink, siteLinkRight, startServer, systemLabels } from './shared.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -287,6 +287,123 @@ try {
     ok('grab: in Google Docs, says to copy and paste instead', inDocs.hint === "p3n can't read what you select in Google Docs. Copy the text and paste it in the box." && !inDocs.text, inDocs.hint);
     await panel.close();
     await docs.close();
+    await tab.close();
+  }
+
+  // Highlights after a Check: the listed sentence and the pattern hit marked on the page with CSS Custom Highlights,
+  // the page's DOM untouched; gone with Clear highlights, an edit to the page's text, the next Rewrite or Check. Text
+  // that isn't the page's selection as it was (pasted, edited, in a text box, a page reloaded since) is marked in the
+  // panel instead, under "In your text". Canned answers only.
+  if (MOCK && (!only || only.includes('marks'))) {
+    matcherChecks(ok);
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const tab = await browser.newPage();
+    watch(tab, 'marks');
+    await tab.setViewport({ width: 900, height: 800 });
+    await tab.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+    await tab.goto(`${base}/static`);
+    const panel = await browser.newPage();
+    watch(panel, 'marks panel');
+    await panel.setViewport({ width: 380, height: 900 });
+    await panel.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+    await mockApi(panel);
+    await panel.goto(`chrome-extension://${id}/ui/panel.html`);
+    const windowId = await panel.evaluate(async () => (await chrome.windows.getCurrent()).id);
+    const tabIdOf = (u) => panel.evaluate(async (url) => (await chrome.tabs.query({ url }))[0]?.id, u);
+    const done = () => panel.waitForFunction(() => document.querySelector('#result .score') && document.querySelector('#busy').hidden, { timeout: 15000, polling: 100 });
+    const marked = () => panel.waitForFunction(() => document.querySelector('#result .marks button'), { timeout: 5000, polling: 100 }).catch(() => {});
+    const unmarked = () => tab.waitForFunction(() => !CSS.highlights.has('p3n-ai') && !CSS.highlights.has('p3n-hit'), { timeout: 5000, polling: 100 }).catch(() => {});
+    const job = async (page, select, ...args) => {
+      const text = await page.evaluate(select, ...args);
+      await panel.evaluate((info, t) => chrome.runtime.sendMessage({ p3nTest: 'startJob', args: ['detect', info, t] }), { selectionText: text, frameId: 0 }, { id: await tabIdOf(page.url()), windowId });
+      await done();
+      await marked();
+    };
+    // Check from the panel: the Text box as it is, or `text` put in it.
+    const check = async (text, wait = true) => {
+      await panel.evaluate((t) => {
+        const el = document.querySelector('#text');
+        if (t != null) { el.value = t; el.dispatchEvent(new Event('input')); }
+        document.querySelector('#result').replaceChildren();
+        document.querySelector('#check').click();
+      }, text ?? null);
+      await done();
+      if (wait) await marked();
+    };
+    const clearButton = () => panel.evaluate(() => document.querySelector('#result .marks button').click());
+
+    const dom = await tab.evaluate(() => document.documentElement.outerHTML);
+    await job(tab, selectNode('#box'));
+    const m1 = await tab.evaluate(pageMarks);
+    const p1 = await panel.evaluate(panelMarks);
+    ok('marks: the listed sentence and the pattern hit marked on the page, Clear highlights by the result', same(m1['p3n-ai'], [MARKED.ai]) && same(m1['p3n-hit'], [MARKED.hit]) && p1.clear && !p1.heading && !p1.marks.length, JSON.stringify(m1));
+    ok("marks: the page's DOM is unchanged", await tab.evaluate(() => document.documentElement.outerHTML) === dom);
+    await shot(tab, 'page-marks-light.png');
+    await panel.bringToFront();
+    await new Promise((r) => setTimeout(r, 1300));
+    await panel.screenshot({ path: path.join(OUT, 'panel-marks-page.png'), fullPage: true });
+    await clearButton();
+    await unmarked();
+    ok('marks: Clear highlights takes them off the page', noPageMarks(await tab.evaluate(pageMarks)) && !(await panel.evaluate(panelMarks)).clear);
+
+    await check();
+    const m2 = await tab.evaluate(pageMarks);
+    await tab.evaluate(() => document.querySelector('#box').firstChild.appendData(' Edited.'));
+    await unmarked();
+    await panel.waitForFunction(() => !document.querySelector('#result .marks button'), { timeout: 5000, polling: 100 }).catch(() => {});
+    ok("marks: an edit to the page's text takes them off, and Clear highlights goes", !noPageMarks(m2) && noPageMarks(await tab.evaluate(pageMarks)) && !(await panel.evaluate(panelMarks)).clear);
+    await check();
+    ok('marks: the page changed since: marked in the panel instead', panelMarked(await panel.evaluate(panelMarks)) && noPageMarks(await tab.evaluate(pageMarks)));
+    await tab.reload();
+    await check();
+    ok('marks: the page reloaded since: marked in the panel instead', panelMarked(await panel.evaluate(panelMarks)) && noPageMarks(await tab.evaluate(pageMarks)));
+
+    await job(tab, selectNode('#box'));
+    const m3 = await tab.evaluate(pageMarks);
+    await panel.evaluate(() => { document.querySelector('#result').replaceChildren(); document.querySelector('#rewrite').click(); });
+    await panel.waitForFunction(() => document.querySelector('#result .rewrite') && document.querySelector('#busy').hidden, { timeout: 15000, polling: 100 });
+    await unmarked();
+    ok('marks: the next Rewrite takes them off', !noPageMarks(m3) && noPageMarks(await tab.evaluate(pageMarks)));
+    await tab.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
+    await check();
+    const m4 = await tab.evaluate(pageMarks);
+    await shot(tab, 'page-marks-dark.png');
+    // Pasted with a paragraph break: the next Check takes the page's marks off, and marks this text in the panel.
+    const pasted = AI_TEXT.replace('. ', '.\n\n');
+    await check(pasted);
+    await unmarked();
+    const p2 = await panel.evaluate(panelMarks);
+    ok("marks: the next Check takes the page's marks off; pasted text is marked in the panel, under In your text", !noPageMarks(m4) && noPageMarks(await tab.evaluate(pageMarks)) && panelMarked(p2), JSON.stringify(p2));
+    const view = async (file) => {
+      await panel.bringToFront();
+      await panel.evaluate(() => document.querySelector('#result .marks').scrollIntoView({ block: 'center' }));
+      await new Promise((r) => setTimeout(r, 1300)); // the score finishes counting
+      await panel.screenshot({ path: path.join(OUT, file) });
+    };
+    await view('panel-marks-light.png');
+    await panel.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
+    await panel.waitForFunction(darkApplied, { timeout: 5000, polling: 100 }).catch(() => {});
+    await view('panel-marks-dark.png');
+    await panel.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+    await panel.evaluate(() => { const el = document.querySelector('#text'); el.value += ' One more line.'; el.dispatchEvent(new Event('input')); });
+    ok("marks: an edit in the Text box takes the panel's marks away", (await panel.evaluate(panelMarks)).heading === null);
+    await check(pasted);
+    await clearButton();
+    const p3 = await panel.evaluate(panelMarks);
+    ok("marks: Clear highlights takes the panel's marks away", p3.heading === null && !p3.clear && !p3.marks.length);
+    await check(pasted);
+    await check(SHORT, false); // none of the listed sentences is in it
+    const p4 = await panel.evaluate(panelMarks);
+    ok("marks: the next Check takes the panel's marks away", p4.heading === null && !p4.clear && !p4.marks.length);
+
+    // Selected in a text box, where Custom Highlights don't reach: marked in the panel.
+    const field = await browser.newPage();
+    watch(field, 'marks field');
+    await field.goto(`${base}/textarea`);
+    await job(field, (t) => { const b = document.querySelector('#box'); b.value = t; b.focus(); b.setSelectionRange(0, t.length); return t; }, AI_TEXT);
+    ok('marks: text selected in a text box is marked in the panel', panelMarked(await panel.evaluate(panelMarks)));
+    await field.close();
+    await panel.close();
     await tab.close();
   }
 

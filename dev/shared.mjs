@@ -1,5 +1,6 @@
 // What the Chrome and Firefox end-to-end checks share: test texts, canned API runs, the local test server.
 import http from 'node:http';
+import { locate } from '../lib/match.js';
 
 export const AI_TEXT = "In today's fast-paced world, it's worth noting that effective communication is more important than ever. Moreover, leveraging the right tools can help teams unlock their full potential and navigate the complexities of modern work.";
 export const SHORT = 'Ultimately, this seamless transition unlocks a rich tapestry of possibilities for teams of all sizes, empowering everyone to thrive in an ever-evolving landscape.';
@@ -8,7 +9,9 @@ export const SHORT = 'Ultimately, this seamless transition unlocks a rich tapest
 export const FIXTURES = {
   detect: { id: 'mock-detect', skill: 'detect', status: 'succeeded', cached: false, error: null, charged_usd: '0',
     output: { version: 'detect-v1.2', ai: 0.96, label: 'ai', verdict: 'Generic filler phrases with no specific claim or example.', confidence: { level: 'medium', reason: 'Two short sentences.' },
-      sentences: [{ text: AI_TEXT.split('. ')[0] + '.', why: 'A stock opening with a vague claim.' }], examples: [] } },
+      // As the API may send them: curly apostrophes where the page has straight ones, and a pattern hit.
+      sentences: [{ text: (AI_TEXT.split('. ')[0] + '.').replaceAll("'", '’'), why: 'A stock opening with a vague claim.' }],
+      examples: [{ sentence: AI_TEXT.split('. ')[1], rules: [{ name: 'Stock phrase (LLM)' }] }] } },
   humanize: { id: 'mock-humanize', skill: 'humanize', status: 'succeeded', cached: false, error: null, charged_usd: '0',
     // The live API ends the rewrite with a line break; the panel must not carry it into the page.
     output: { version: 'humanize-v1.3', model: 'haiku', text: 'This transition helps teams of all sizes.\n', ai_before: 0.95, ai_after: 0.01, label_after: 'human', passes: true, invented_blocked: [] } },
@@ -57,7 +60,8 @@ export const HEADLINES = [
 ];
 
 const page = (body) => `<!doctype html><meta charset="utf-8"><title>p3n test</title>
-<style>body{font:16px/1.6 system-ui;max-width:640px;margin:40px auto;padding:0 20px;color:#222}textarea,[contenteditable]{width:100%;min-height:140px;font:inherit;padding:10px;border:1px solid #bbb;border-radius:6px}</style>${body}`;
+<style>body{font:16px/1.6 system-ui;max-width:640px;margin:40px auto;padding:0 20px;color:#222}textarea,[contenteditable]{width:100%;min-height:140px;font:inherit;padding:10px;border:1px solid #bbb;border-radius:6px}
+@media (prefers-color-scheme:dark){body{background:#18181b;color:#e4e4e7}textarea,[contenteditable]{background:#27272a;color:inherit;border-color:#52525b}}</style>${body}`;
 export const PAGES = {
   '/textarea': page(`<h1>Compose</h1><textarea id="box">${SHORT}</textarea>`),
   '/rich': page(`<h1>Email</h1><div id="box" contenteditable="true"><div>Hi team,</div><div>${SHORT}</div><div>Thanks</div></div>`),
@@ -137,6 +141,39 @@ export const systemLabels = () => {
   const b = (v) => document.querySelector(`[data-theme-set="${v}"]`);
   return { system: [b('system').getAttribute('aria-label'), b('system').title, b('system').textContent.trim()], light: b('light').getAttribute('aria-label') ?? b('light').textContent.trim(), dark: b('dark').getAttribute('aria-label') ?? b('dark').textContent.trim() };
 };
+
+// Highlights after a Check. What the detect fixture's sentence and pattern hit mark in AI_TEXT.
+export const MARKED = { ai: AI_TEXT.split('. ')[0] + '.', hit: AI_TEXT.split('. ')[1] };
+// The marks on the page (CSS Custom Highlights, read in the page's own world), and in the panel ("In your text").
+export const pageMarks = () => Object.fromEntries(['p3n-ai', 'p3n-hit'].map((n) => [n, [...(CSS.highlights.get(n) ?? [])].map((r) => r.toString())]));
+export const noPageMarks = (m) => !m['p3n-ai'].length && !m['p3n-hit'].length;
+export const panelMarks = () => ({
+  clear: !!document.querySelector('#result .marks button'),
+  heading: document.querySelector('#result .marks h3')?.textContent ?? null,
+  marks: [...document.querySelectorAll('#result .marked mark')].map((m) => [m.className, m.textContent, m.title]),
+});
+// The panel view of AI_TEXT: the sentence with its why, the pattern hit with its rule.
+export const panelMarked = (p, text = MARKED) => p.heading === 'In your text' && p.clear && JSON.stringify(p.marks)
+  === JSON.stringify([['ai', text.ai, 'A stock opening with a vague claim.'], ['hit', text.hit, 'Stock phrase']]);
+
+// The matcher on its own (lib/match.js): curly quotes as straight, whitespace runs as one space, any case, edge
+// punctuation left out, a repeat at its next occurrence, a sentence not in the text skipped.
+export function matcherChecks(ok) {
+  const at = (text, ...sentences) => locate(text, sentences.map((t) => ({ text: t }))).map((m) => text.slice(m.start, m.end));
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const quotes = at('She said: “It’s done.” Then she left.', 'She said: "It\'s done."');
+  ok('matcher: curly quotes match straight ones', same(quotes, ['She said: “It’s done.”']), JSON.stringify(quotes));
+  const nbsp = String.fromCharCode(160);
+  const spaced = at(`Intro.\nOne line\nand  the${nbsp}next. Other.`, 'one line and the next.');
+  ok('matcher: line breaks and runs of spaces count as one space', same(spaced, [`One line\nand  the${nbsp}next.`]), JSON.stringify(spaced));
+  const cased = at('The PLAN works. Really.', '— the plan works!');
+  ok('matcher: any case, punctuation at either end left out', same(cased, ['The PLAN works']), JSON.stringify(cased));
+  const text = 'Do it now. Then rest. Do it now.';
+  const repeats = locate(text, [{ text: 'Do it now.' }, { text: 'do it now' }, { text: 'Do it now.' }]).map((m) => m.start);
+  ok('matcher: a repeated sentence goes to its next occurrence', same(repeats, [0, text.lastIndexOf('Do')]), JSON.stringify(repeats));
+  const missing = at(text, 'Not in this text.', '...', 'Then rest.');
+  ok('matcher: a sentence not in the text is skipped', same(missing, ['Then rest.']), JSON.stringify(missing));
+}
 
 // An editor that refuses the browser's own edit, so Replace puts the text in directly and the page can't undo it:
 // [page, select]. The tests make execCommand fail in the extension's isolated world there, where lib/page.js runs.
