@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdir, mkdtemp, readFile, writeFile, appendFile } from 'node:fs/promises';
-import { DOCS_PAGE, DOCS_URL, GUARDS, HEADLINES, NOUNDO, SHORT, darkApplied, lightApplied, mock, oddAnswers, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
+import { DOCS_PAGE, DOCS_URL, GUARDS, HEADLINES, NOUNDO, SHORT, darkApplied, footFits, footLayout, lightApplied, mock, oddAnswers, scoreSettled, selectField, selectFromLineBreak, selectNode, siteLink, siteLinkRight, startServer, systemLabels } from './shared.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(import.meta.dirname, 'out');
@@ -262,11 +262,32 @@ try {
   const theme = (p) => p.evaluate(async () => ({ stored: (await browser.storage.local.get('theme')).theme ?? 'system', checked: document.querySelector('[data-theme-set][aria-checked="true"]')?.dataset.themeSet }));
   const turns = (p, dark) => p.waitForFunction(dark ? darkApplied : lightApplied, { timeout: 5000, polling: 100 }).then(() => true, () => false);
   ok('switch: System, Light and Dark at the panel\'s foot, nothing in the header', await panel.evaluate(() => document.querySelectorAll('footer [data-theme-set]').length === 3 && !document.querySelector('header [data-theme-set], header [data-theme-toggle]')));
+  const labels = await panel.evaluate(systemLabels);
+  ok('panel: the System icon is named "Match system theme", Light and Dark keep theirs', labels.system[0] === 'Match system theme' && labels.system[1] === 'Match system theme' && labels.light === 'Light' && labels.dark === 'Dark', JSON.stringify(labels));
+  const optLabels = await opts.evaluate(systemLabels);
+  ok('options: System keeps its label, with "Match system theme" as its tooltip', optLabels.system[0] === null && optLabels.system[1] === 'Match system theme' && optLabels.system[2] === 'System' && optLabels.light === 'Light' && optLabels.dark === 'Dark', JSON.stringify(optLabels));
+  // The link to p3n.si after the quota line, without a key (with one, in the odd answers).
+  const link = await panel.evaluate(siteLink);
+  ok('panel: a link to p3n.si after the quota line (new tab, noopener, named "p3n.si")', siteLinkRight(link), JSON.stringify(link));
   await panel.evaluate(() => document.querySelector('footer [data-theme-set="dark"]').click());
   ok("switch: Dark at the panel's foot turns it dark and keeps it", await turns(panel, true) && (await theme(panel)).stored === 'dark');
   ok('switch: the settings page follows', await turns(opts, true) && (await theme(opts)).checked === 'dark');
   await opts.evaluate(() => document.querySelector('[data-theme-set="system"]').click());
   ok('switch: System follows the browser again', await turns(panel, false) && (await theme(panel)).stored === 'system');
+
+  // The foot in a sidebar as narrow as 300 px: nothing past the edge, the icons in one row on the right. Firefox's
+  // automation can't size an extension page, so the panel is framed at that width in itself.
+  await activate(panelTab);
+  await panel.evaluate(() => {
+    const f = Object.assign(document.createElement('iframe'), { id: 'narrow', src: 'panel.html' });
+    f.style.cssText = 'position:fixed;left:0;top:0;width:300px;height:640px;border:0';
+    document.body.append(f);
+    return new Promise((r) => f.addEventListener('load', r, { once: true }));
+  });
+  await panel.waitForFunction(() => document.querySelector('#narrow').contentDocument.querySelector('#quota').textContent, { timeout: 5000, polling: 100 }).catch(() => {});
+  const narrow = await panel.evaluate(footLayout, '#narrow');
+  await panel.evaluate(() => document.querySelector('#narrow').remove());
+  ok('panel: the foot fits at 300 px', footFits(narrow) && narrow.width === 300, JSON.stringify(narrow));
 
   if (MOCK) ok('every API call names the client (X-P3N-Client)', [...mock.clients].join() === `p3n-firefox/${manifest.version}`, [...mock.clients].join(', '));
   ok('no script errors', errors.length === 0, errors.slice(0, 5).join(' || '));

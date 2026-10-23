@@ -109,6 +109,35 @@ export const darkApplied = () => getComputedStyle(document.body).backgroundColor
 export const lightApplied = () => getComputedStyle(document.body).backgroundColor === 'rgb(251, 250, 247)'
   && !![...document.querySelectorAll('.brand img')].find((i) => i.getClientRects().length)?.currentSrc.endsWith('/icons/logo.png');
 
+// The link to p3n.si at the panel's foot, after the quota line and outside it (refreshAccount rewrites #quota). Its
+// name leaves out the hidden arrow, as a screen reader does.
+export const siteLink = () => {
+  const a = document.querySelector('footer a[href*="p3n.si"]');
+  const quota = document.querySelector('#quota');
+  if (!a) return null;
+  const named = a.cloneNode(true);
+  named.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove());
+  return { href: a.getAttribute('href'), target: a.target, rel: a.rel, title: a.title, text: a.textContent, name: named.textContent.trim(),
+    outside: !quota.contains(a) && !!(quota.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING), shown: a.getClientRects().length > 0, quota: quota.textContent };
+};
+export const siteLinkRight = (l) => !!l && l.href === 'https://p3n.si/' && l.target === '_blank' && l.rel === 'noopener' && l.text === 'p3n.si ↗'
+  && l.name === 'p3n.si' && l.title === 'Open p3n.si in your browser' && l.outside && l.shown;
+// The foot's boxes: quota and link on the left, the theme icons on the right in one row, none past the edge. In the
+// page, or in the panel framed in it at `frame` (a selector).
+export const footLayout = (frame) => {
+  const w = frame ? document.querySelector(frame).contentWindow : window;
+  const box = (s) => { const r = w.document.querySelector(s).getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom }; };
+  return { width: w.innerWidth, scroll: w.document.documentElement.scrollWidth, quota: box('#quota'), link: box('footer a[href]'), pill: box('footer .pill') };
+};
+export const footFits = (f) => f.scroll <= f.width && f.pill.r <= f.width && f.pill.b - f.pill.t < 40
+  && f.quota.r <= f.pill.l && f.link.r <= f.pill.l && f.link.t >= f.quota.b - 1;
+// The System choice: the icon at the panel's foot is named for what it does, the settings page's labelled one keeps
+// its label and says the same as a tooltip. Light and Dark keep their names.
+export const systemLabels = () => {
+  const b = (v) => document.querySelector(`[data-theme-set="${v}"]`);
+  return { system: [b('system').getAttribute('aria-label'), b('system').title, b('system').textContent.trim()], light: b('light').getAttribute('aria-label') ?? b('light').textContent.trim(), dark: b('dark').getAttribute('aria-label') ?? b('dark').textContent.trim() };
+};
+
 // An editor that refuses the browser's own edit, so Replace puts the text in directly and the page can't undo it:
 // [page, select]. The tests make execCommand fail in the extension's isolated world there, where lib/page.js runs.
 export const NOUNDO = [['/textarea', selectField], ['/rich', selectNode('#box div:nth-child(2)')]];
@@ -159,9 +188,11 @@ export async function oddAnswers(panel, ok) {
   await panel.evaluate(() => (globalThis.browser ?? chrome).storage.local.set({ apiKey: 'p3n_not_a_real_key' }));
   await panel.waitForFunction(() => /accepted/.test(document.querySelector('#quota').textContent), { timeout: 10000, polling: 100 }).catch(() => {});
   const foot = await panel.evaluate(() => ({ quota: document.querySelector('#quota').textContent, button: document.querySelector('#account').textContent }));
+  const link = await panel.evaluate(siteLink);
   await panel.evaluate(() => (globalThis.browser ?? chrome).storage.local.remove('apiKey'));
   await panel.waitForFunction(() => document.querySelector('#account').textContent === 'Add API key', { timeout: 5000, polling: 100 }).catch(() => {});
   ok('key refused: the foot points at API key at the top', foot.quota === "Your API key wasn't accepted. Click API key at the top to change it." && foot.button === 'API key', foot.quota);
+  ok('with a key, the quota line rewritten: the link to p3n.si still follows it', siteLinkRight(link) && link.quota === foot.quota, JSON.stringify(link));
 
   // A long text answers 202 and the panel polls the run; a dropped connection on the way doesn't end it.
   mock.queue = [{ status: 202, body: { ...FIXTURES.detect, status: 'queued', output: null } }, { drop: true }];

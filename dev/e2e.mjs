@@ -3,7 +3,7 @@
 // A script can't click Chrome's own right-click menu, so it loads a dev copy of the extension that
 // also has host access to the local test server, and starts the same startJob the menu does, by message.
 import puppeteer from 'puppeteer-core';
-import { DOCS_PAGE, DOCS_URL, FIXTURES, GUARDS, HEADLINES, NOUNDO, SHORT, darkApplied, lightApplied, mock, oddAnswers, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, startServer } from './shared.mjs';
+import { DOCS_PAGE, DOCS_URL, FIXTURES, GUARDS, HEADLINES, NOUNDO, SHORT, darkApplied, footFits, footLayout, lightApplied, mock, oddAnswers, reply, scoreSettled, selectField, selectFromLineBreak, selectNode, siteLink, siteLinkRight, startServer, systemLabels } from './shared.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import { cp, mkdtemp, mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
@@ -38,8 +38,9 @@ const { server, base } = await startServer();
 
 // ---- browser ---------------------------------------------------------------------------------
 await mkdir(OUT, { recursive: true });
-// CI runners and containers have no usable Chrome sandbox.
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, pipe: true, enableExtensions: true, args: ['--window-size=1280,900', '--lang=en-US', ...(process.env.CI ? ['--no-sandbox'] : [])] });
+// CI runners and containers have no usable Chrome sandbox. p3n.si itself doesn't resolve here, so the tab the panel's
+// link opens never loads the site.
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, pipe: true, enableExtensions: true, args: ['--window-size=1280,900', '--lang=en-US', '--host-resolver-rules=MAP p3n.si ~NOTFOUND', ...(process.env.CI ? ['--no-sandbox'] : [])] });
 const errors = [];
 try {
   const id = await browser.installExtension(ext);
@@ -360,6 +361,20 @@ try {
     return { header: !document.querySelector('header [data-theme-set], header [data-theme-toggle]'), buttons: pill?.querySelectorAll('[data-theme-set]').length, inView: !!r && r.right <= innerWidth && r.width > 0 };
   });
   ok('panel: System, Light and Dark at its foot, nothing in the header', foot.header && foot.buttons === 3 && foot.inView && (await theme(pane)).checked === 'system', JSON.stringify(foot));
+  const labels = await pane.evaluate(systemLabels);
+  ok('panel: the System icon is named "Match system theme", Light and Dark keep theirs', labels.system[0] === 'Match system theme' && labels.system[1] === 'Match system theme'
+    && labels.light === 'Light' && labels.dark === 'Dark' && !!(await pane.$('::-p-aria([name="Match system theme"][role="radio"])')), JSON.stringify(labels));
+  // In front: a page behind another doesn't update its accessibility tree in headless Chrome.
+  await opts.bringToFront();
+  const optLabels = await opts.evaluate(systemLabels);
+  ok('options: System keeps its label, with "Match system theme" as its tooltip', optLabels.system[0] === null && optLabels.system[1] === 'Match system theme' && optLabels.system[2] === 'System'
+    && optLabels.light === 'Light' && optLabels.dark === 'Dark' && !!(await opts.$('::-p-aria([name="System"][role="radio"])')), JSON.stringify(optLabels));
+  await pane.bringToFront();
+  // The link to p3n.si after the quota line, without a key (with one, in the odd answers); its name in the browser's
+  // own accessibility tree is "p3n.si".
+  const link = await pane.evaluate(siteLink);
+  const named = await pane.$('::-p-aria([name="p3n.si"][role="link"])');
+  ok('panel: a link to p3n.si after the quota line (new tab, noopener, named "p3n.si")', siteLinkRight(link) && !!named && await named.evaluate((a) => a.matches('footer a[href="https://p3n.si/"]')), JSON.stringify(link));
   await still(pane, 'panel-switch-light.png');
   await press(pane, 'footer [data-theme-set="dark"]');
   const t1 = await theme(pane);
@@ -375,6 +390,30 @@ try {
   await still(opts, 'options-switch-light.png');
   await press(pane, 'footer [data-theme-set="system"]');
   ok('panel: System follows the browser again', await turns(pane, true) && (await theme(pane)).stored === 'system' && (await theme(opts)).checked === 'system');
+
+  // The foot at a usual width and at the side panel's narrowest (a Firefox sidebar can be as narrow), with the longest
+  // quota line (no free calls counted yet), in both themes: nothing past the edge, the icons in one row on the right.
+  await pane.evaluate(() => chrome.storage.session.remove('free'));
+  await pane.reload();
+  await pane.waitForFunction(() => /^Free without a key/.test(document.querySelector('#quota').textContent), { timeout: 5000, polling: 100 }).catch(() => {});
+  for (const width of [380, 300]) {
+    await pane.setViewport({ width, height: 640 });
+    const fits = [];
+    for (const scheme of ['light', 'dark']) {
+      await pane.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: scheme }]);
+      await turns(pane, scheme === 'dark');
+      fits.push(await pane.evaluate(footLayout));
+      await still(pane, `panel-foot-${width}-${scheme}.png`);
+    }
+    ok(`panel: the foot fits at ${width} px, light and dark`, fits.every(footFits) && /^Free without a key/.test(await pane.$eval('#quota', (q) => q.textContent)), JSON.stringify(fits[0]));
+  }
+  // A click opens p3n.si in a new tab and leaves the panel where it is (the tab fails to resolve, see the launch).
+  await pane.bringToFront();
+  const opened = browser.waitForTarget((t) => t.url() === 'https://p3n.si/', { timeout: 5000 }).catch(() => null);
+  await pane.click('footer a[href="https://p3n.si/"]');
+  const site = await opened;
+  ok('panel: the link opens p3n.si in a new tab, not in the panel', site?.type() === 'page' && pane.url() === `chrome-extension://${id}/ui/panel.html`, site?.url() ?? 'no tab');
+  await (await site?.page())?.close();
   await pane.close();
 
   if (MOCK) ok('every API call names the client (X-P3N-Client)', [...mock.clients].join() === `p3n-chrome/${manifest.version}`, [...mock.clients].join(', '));
