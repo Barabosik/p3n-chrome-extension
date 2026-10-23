@@ -1,5 +1,6 @@
 import { runSkill, me, ApiError, LINKS, SITE, MAX_CHARS, MIN_DETECT_CHARS, MIN_REWRITE_WORDS, rewriteWords } from '../lib/api.js';
-import { captureSelection, replaceSelection } from '../lib/page.js';
+import { captureSelection, markSelection, replaceSelection, unmarkSelection } from '../lib/page.js';
+import { locate } from '../lib/match.js';
 import { ext } from '../lib/ext.js';
 
 const $ = (s) => document.querySelector(s);
@@ -7,7 +8,7 @@ const els = {
   text: $('#text'), count: $('#count'), check: $('#check'), rewrite: $('#rewrite'), grab: $('#grab'), hint: $('#hint'),
   busy: $('#busy'), busyText: $('#busy-text'), cancel: $('#cancel'), result: $('#result'), quota: $('#quota'), account: $('#account'),
 };
-const state = { key: '', windowId: null, source: null, controller: null, timer: null, free: null, last: null, taking: null };
+const state = { key: '', windowId: null, source: null, controller: null, timer: null, free: null, last: null, taking: null, marks: null, marking: 0 };
 
 // Tiny DOM builder. Strings become text nodes, so API text is never parsed as HTML.
 function h(tag, attrs = {}, ...kids) {
@@ -111,7 +112,7 @@ function hint(msg) {
   els.hint.hidden = !msg;
 }
 
-els.text.addEventListener('input', refreshInput);
+els.text.addEventListener('input', () => { refreshInput(); if (!state.marks) markSlot()?.replaceChildren(); });
 els.check.addEventListener('click', () => start('detect', els.text.value));
 els.rewrite.addEventListener('click', () => start('humanize', els.text.value));
 els.cancel.addEventListener('click', () => state.controller?.abort());
@@ -133,7 +134,7 @@ async function grabSelection() {
     const results = await ext.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: captureSelection });
     const hit = results.find((r) => r.result?.text?.trim());
     if (!hit) return hint(inGoogleDocs(tab) ? DOCS_HINT : 'Nothing is selected on the page. Select some text first.');
-    state.source = { tabId: tab.id, frameId: hit.frameId, editable: hit.result.editable, text: hit.result.text };
+    state.source = { tabId: tab.id, frameId: hit.frameId, editable: hit.result.editable, text: hit.result.text, rangeText: hit.result.rangeText };
     els.text.value = hit.result.text;
     arrived();
     refreshInput();
@@ -152,7 +153,7 @@ async function takeJob(job) {
   const { handled } = await ext.storage.session.get('handled');
   if (handled === job.id || Date.now() - job.at > 120_000) return;
   await ext.storage.session.set({ handled: job.id });
-  state.source = { tabId: job.tabId, frameId: job.frameId, editable: job.editable, text: job.text };
+  state.source = { tabId: job.tabId, frameId: job.frameId, editable: job.editable, text: job.text, rangeText: job.rangeText };
   els.text.value = job.text;
   arrived();
   refreshInput();
@@ -169,6 +170,7 @@ ext.storage.onChanged.addListener((changes, area) => {
 async function start(skill, text, options) {
   text = (text || '').trim();
   if (!text) return;
+  clearMarks();
   state.controller?.abort();
   if (text.length > limit()) {
     return showError(new ApiError(422, 'too_long', state.key
@@ -239,6 +241,7 @@ function render(run, text) {
   const box = stagger(h('div', { class: 'result-in', style: 'display:flex;flex-direction:column;gap:14px' }, body, meta));
   els.result.replaceChildren(box);
   runScore(box);
+  if (run.skill === 'detect') showMarks(run.output, text);
 }
 
 // The big number: animated for the eye, stated once for screen readers (the result is a live region).
@@ -255,23 +258,31 @@ function renderDetect(o) {
   ];
   if (o.verdict) parts.push(h('p', {}, o.verdict));
   if (o.confidence?.level) parts.push(h('p', { class: 'small muted' }, `Confidence ${o.confidence.level}: ${o.confidence.reason ?? ''}`));
-  // The panel is narrow: the sentences come first, and a pattern hit is listed only if its sentence isn't already there.
-  const norm = (t) => (t || '').replace(/\s+/g, ' ').trim();
-  const shown = new Set((o.sentences ?? []).slice(0, 5).map((s) => norm(s.text)));
-  if (shown.size) {
+  const { sentences, hits } = listed(o);
+  if (sentences.length) {
     parts.push(h('div', {}, h('h3', {}, 'Sentences that read as AI'),
-      h('ul', { class: 'quotes' }, o.sentences.slice(0, 5).map((s, j) => h('li', { class: 'hit', style: `--j:${j}` }, s.why ? h('span', { class: 'why' }, s.why) : null, h('q', {}, clip(s.text)))))));
+      h('ul', { class: 'quotes' }, sentences.map((s, j) => h('li', { class: 'hit', style: `--j:${j}` }, s.why ? h('span', { class: 'why' }, s.why) : null, h('q', {}, clip(s.text)))))));
   }
-  const hits = (o.examples ?? []).filter((e) => !shown.has(norm(e.sentence))).slice(0, 6);
   if (hits.length) {
     parts.push(h('div', {}, h('h3', {}, 'Pattern hits'),
-      h('ul', { class: 'quotes' }, hits.map((e) => h('li', {},
-        h('span', { class: 'why' }, (e.rules ?? []).map((r) => String(r.name ?? '').replace(/\s*\(LLM\)$/, '')).join(' · ')),
-        h('q', {}, clip(e.sentence)))))));
+      h('ul', { class: 'quotes' }, hits.map((e) => h('li', {}, h('span', { class: 'why' }, ruleNames(e)), h('q', {}, clip(e.sentence)))))));
   }
+  // Filled once the sentences are marked (showMarks): Clear highlights, and the text itself when it isn't on a page.
+  // Not announced: the lists above already say which sentences, and the text would be read out again.
+  parts.push(h('div', { class: 'marks', 'aria-live': 'off' }));
   parts.push(h('p', { class: 'small muted' }, 'A score is a probability, not proof. Read the sentences yourself before deciding anything about a person.'));
   return parts;
 }
+
+// What a Check lists. The panel is narrow: the sentences come first, and a pattern hit only if its sentence isn't
+// already there.
+function listed(o) {
+  const norm = (t) => (t || '').replace(/\s+/g, ' ').trim();
+  const sentences = (o.sentences ?? []).slice(0, 5);
+  const shown = new Set(sentences.map((s) => norm(s.text)));
+  return { sentences, hits: (o.examples ?? []).filter((e) => !shown.has(norm(e.sentence))).slice(0, 6) };
+}
+const ruleNames = (e) => (e.rules ?? []).map((r) => String(r.name ?? '').replace(/\s*\(LLM\)$/, '')).join(' · ');
 
 function renderHumanize(o, sent) {
   const t = tone(o.ai_after);
@@ -376,6 +387,85 @@ function showError(e) {
   }
   els.result.replaceChildren(stagger(h('div', { class: 'note error result-in', style: 'display:flex;flex-direction:column;gap:8px' }, kids)));
 }
+
+// ---- highlights --------------------------------------------------------------------------
+
+// After a Check, the sentences it lists are marked in the text that was checked (lib/match.js finds them): on the
+// page when that text is the page's selection (lib/page.js, CSS Custom Highlights), else here under "In your text"
+// (pasted text, a text box, Google Docs, or a page p3n can't reach any more). The next Check or Rewrite, an edit to
+// that text and Clear highlights take them away.
+// Tints and underlines in p3n's orange that read on light and dark pages alike.
+const PAGE_MARKS_CSS = '::highlight(p3n-ai) { background-color: rgb(234 88 12 / .3); text-decoration: underline solid 2px rgb(234 88 12); }'
+  + ' ::highlight(p3n-hit) { background-color: rgb(245 158 11 / .18); text-decoration: underline dotted 2px rgb(217 119 6); }';
+
+const markSlot = () => els.result.querySelector('.marks');
+
+async function showMarks(o, text) {
+  const run = ++state.marking;
+  const { sentences, hits } = listed(o);
+  const items = [...sentences.map((s) => ({ text: s.text, why: s.why, kind: 'ai' })), ...hits.map((e) => ({ text: e.sentence, why: ruleNames(e), kind: 'hit' }))];
+  const clear = h('button', { type: 'button', class: 'link small' }, 'Clear highlights');
+  clear.addEventListener('click', () => {
+    const box = els.result.firstElementChild;
+    const hadFocus = document.activeElement === clear;
+    clearMarks();
+    if (hadFocus) focusOn(box);
+  });
+  const src = state.source;
+  if (src?.rangeText && src.tabId != null && src.text.trim() === text) {
+    const marks = locate(src.rangeText, items);
+    const page = marks.length ? await markPage(src, marks) : null;
+    if (run !== state.marking) return page && unmarkPage(page);
+    if (page) {
+      state.marks = page;
+      return markSlot()?.replaceChildren(h('div', { class: 'row' }, clear));
+    }
+  }
+  const marks = locate(text, items);
+  if (marks.length) markSlot()?.replaceChildren(h('div', { class: 'row between' }, h('h3', {}, 'In your text'), clear), marksView(text, marks));
+}
+
+// The checked text with its marks; a mark's tooltip says why.
+function marksView(text, marks) {
+  const kids = [];
+  let at = 0;
+  for (const m of marks) {
+    kids.push(text.slice(at, m.start), h('mark', { class: m.kind, title: m.why || null }, text.slice(m.start, m.end)));
+    at = m.end;
+  }
+  return h('div', { class: 'marked' }, kids, text.slice(at));
+}
+
+async function markPage(src, marks) {
+  const page = { target: { tabId: src.tabId, frameIds: [src.frameId ?? 0] }, id: crypto.randomUUID() };
+  try {
+    await ext.scripting.insertCSS({ target: page.target, css: PAGE_MARKS_CSS });
+    const [res] = await ext.scripting.executeScript({ target: page.target, func: markSelection, args: [src.rangeText, marks.map((m) => [m.start, m.end, m.kind]), page.id] });
+    if (res?.result?.ok) return page;
+  } catch {
+    // The tab went to another page, or the one-time access to it lapsed: the marks go in the panel instead.
+  }
+  ext.scripting.removeCSS({ target: page.target, css: PAGE_MARKS_CSS }).catch(() => {});
+  return null;
+}
+
+function unmarkPage({ target }) {
+  ext.scripting.executeScript({ target, func: unmarkSelection }).catch(() => {});
+  ext.scripting.removeCSS({ target, css: PAGE_MARKS_CSS }).catch(() => {});
+}
+
+function clearMarks() {
+  state.marking++; // a Check still marking its sentences drops them
+  markSlot()?.replaceChildren();
+  if (state.marks) unmarkPage(state.marks);
+  state.marks = null;
+}
+
+// The page took its marks away itself: the text under them changed. And the panel closing takes them away too.
+ext.runtime.onMessage.addListener((m) => {
+  if (m?.p3nMarks === 'cleared' && m.id === state.marks?.id) clearMarks();
+});
+addEventListener('pagehide', clearMarks);
 
 // ---- account / quota ---------------------------------------------------------------------
 

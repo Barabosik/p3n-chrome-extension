@@ -88,6 +88,7 @@ What's new (AMO's version notes; the Chrome Web Store has no such field):
 - Rewrite says when a selection is under eight words, before it uses a call.
 - Replace mentions Ctrl+Z only where the page can undo it, and Use selected text in Google Docs says to paste instead.
 - A p3n.si link at the foot of the panel, and the theme button that follows your system is labelled "Match system theme".
+- After a Check, the sentences it lists are highlighted in the text on the page, or in the panel under "In your text" for pasted text and text boxes. Clear highlights takes them away.
 ```
 
 Listing changes that go with it, in both stores:

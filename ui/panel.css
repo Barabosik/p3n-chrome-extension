@@ -63,6 +63,16 @@ h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
 
 .rewrite { white-space: pre-wrap; background: var(--tint); border-radius: var(--radius); padding: 12px; font-size: 15px; line-height: 1.6; }
 
+/* After a Check: Clear highlights, and the checked text with the listed sentences marked when they can't be marked
+   where it is (panel.js showMarks). The sentences as the list's highlight with a solid line, pattern hits lighter
+   with a dotted one. */
+.marks { display: flex; flex-direction: column; gap: 8px; }
+.marks:empty { display: none; }
+.marks h3 { margin: 0; }
+.marked { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18em; overflow: auto; background: var(--tint); border-radius: var(--radius); padding: 10px 12px; font-size: 14px; line-height: 1.7; }
+.marked mark { color: inherit; background: var(--highlight); border-radius: 2px; text-decoration: underline solid 2px var(--accent-text); text-underline-offset: 3px; }
+.marked mark.hit { background: color-mix(in srgb, var(--highlight) 60%, transparent); text-decoration-style: dotted; text-decoration-color: var(--amber); }
+
 footer.foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 14px; }
 /* The quota line, then the link to p3n.si; they wrap in a narrow sidebar and leave the icons on the right. */
 .foot-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; overflow-wrap: anywhere; }

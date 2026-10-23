@@ -25,6 +25,7 @@ ext.contextMenus.onClicked.addListener((info, tab) => {
 async function startJob(skill, info, tab) {
   let text = info.selectionText || '';
   let editable = false;
+  let rangeText = null;
   try {
     // The menu click gives one-time access to this tab (activeTab), enough to read the selection
     // with its line breaks and remember where it was for Replace.
@@ -32,11 +33,11 @@ async function startJob(skill, info, tab) {
       target: { tabId: tab.id, frameIds: [info.frameId ?? 0] },
       func: captureSelection,
     });
-    if (res?.result?.text) ({ text, editable } = res.result);
+    if (res?.result?.text) ({ text, editable, rangeText = null } = res.result);
   } catch {
     // Browser pages, the extension stores and PDFs don't allow scripts: keep the menu's copy of the text, no Replace.
   }
   await ext.storage.session.set({
-    job: { id: crypto.randomUUID(), skill, text, editable, tabId: tab.id, frameId: info.frameId ?? 0, windowId: tab.windowId, at: Date.now() },
+    job: { id: crypto.randomUUID(), skill, text, editable, rangeText, tabId: tab.id, frameId: info.frameId ?? 0, windowId: tab.windowId, at: Date.now() },
   });
 }
